@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { CalorieRing } from './CalorieRing';
 import { MacroProgress } from './MacroProgress';
@@ -8,8 +8,13 @@ import { useNutritionStore } from '@/hooks/useNutritionStore';
 import { MealType } from '@/types/nutrition';
 
 export const Dashboard = () => {
-  const { profile, getEntriesByMeal, getDailyProgress, addEntry, removeEntry } = useNutritionStore();
+  const { profile, getEntriesByMeal, getDailyProgress, addEntry, removeEntry, checkDailyReset } = useNutritionStore();
   const [addFoodMeal, setAddFoodMeal] = useState<MealType | null>(null);
+
+  // Check for daily reset when Dashboard mounts
+  useEffect(() => {
+    checkDailyReset();
+  }, [checkDailyReset]);
   
   const progress = getDailyProgress();
   const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snacks'];
