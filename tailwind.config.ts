@@ -7,7 +7,7 @@ export default {
   theme: {
     container: {
       center: true,
-      padding: "2rem",
+      padding: "1rem",
       screens: {
         "2xl": "1400px",
       },
@@ -57,33 +57,45 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        nutrition: {
+          protein: "hsl(var(--protein))",
+          "protein-light": "hsl(var(--protein-light))",
+          carbs: "hsl(var(--carbs))",
+          "carbs-light": "hsl(var(--carbs-light))",
+          fat: "hsl(var(--fat))",
+          "fat-light": "hsl(var(--fat-light))",
+          calories: "hsl(var(--calories))",
+          "calories-light": "hsl(var(--calories-light))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      boxShadow: {
+        sm: "var(--shadow-sm)",
+        md: "var(--shadow-md)",
+        lg: "var(--shadow-lg)",
+      },
       keyframes: {
         "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
+        "progress-fill": {
+          from: { strokeDashoffset: "339.292" },
+          to: { strokeDashoffset: "var(--progress-offset)" },
         },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "progress-fill": "progress-fill 1s ease-out forwards",
       },
     },
   },
