@@ -1,12 +1,34 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from 'react';
+import { Dashboard } from '@/components/Dashboard';
+import { SearchTab } from '@/components/SearchTab';
+import { ProgressTab } from '@/components/ProgressTab';
+import { ProfileTab } from '@/components/ProfileTab';
+import { BottomNav } from '@/components/BottomNav';
+
+type Tab = 'dashboard' | 'search' | 'progress' | 'profile';
 
 const Index = () => {
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return <Dashboard />;
+      case 'search':
+        return <SearchTab />;
+      case 'progress':
+        return <ProgressTab />;
+      case 'profile':
+        return <ProfileTab />;
+      default:
+        return <Dashboard />;
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="max-w-md mx-auto">
+      {renderContent()}
+      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   );
 };
