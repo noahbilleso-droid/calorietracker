@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { Scan } from 'lucide-react';
 import { CalorieRing } from './CalorieRing';
 import { MacroProgress } from './MacroProgress';
 import { MealCard } from './MealCard';
 import { AddFoodDialog } from './AddFoodDialog';
+import { ScanFoodSheet } from './scan/ScanFoodSheet';
+import { Button } from './ui/button';
 import { useNutritionStore } from '@/hooks/useNutritionStore';
 import { MealType } from '@/types/nutrition';
 
 export const Dashboard = () => {
   const { profile, getEntriesByMeal, getDailyProgress, addEntry, removeEntry, checkDailyReset } = useNutritionStore();
   const [addFoodMeal, setAddFoodMeal] = useState<MealType | null>(null);
+  const [scanSheetOpen, setScanSheetOpen] = useState(false);
 
   // Check for daily reset when Dashboard mounts
   useEffect(() => {
@@ -32,9 +36,19 @@ export const Dashboard = () => {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
+          className="flex items-start justify-between"
         >
-          <p className="text-muted-foreground text-sm">{today}</p>
-          <h1 className="text-2xl font-bold text-foreground">Today's Nutrition</h1>
+          <div>
+            <p className="text-muted-foreground text-sm">{today}</p>
+            <h1 className="text-2xl font-bold text-foreground">Today's Nutrition</h1>
+          </div>
+          <Button 
+            onClick={() => setScanSheetOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <Scan className="h-4 w-4" />
+            Scan Food
+          </Button>
         </motion.div>
       </header>
 
@@ -121,6 +135,12 @@ export const Dashboard = () => {
         onOpenChange={(open) => !open && setAddFoodMeal(null)}
         mealType={addFoodMeal || 'breakfast'}
         onAddFood={addEntry}
+      />
+
+      {/* Scan Food Sheet */}
+      <ScanFoodSheet
+        open={scanSheetOpen}
+        onOpenChange={setScanSheetOpen}
       />
     </div>
   );
