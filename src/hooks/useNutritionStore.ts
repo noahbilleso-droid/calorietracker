@@ -1,5 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { FoodEntry, MealType, DailyProgress, UserProfile } from '@/types/nutrition';
+
+const STORAGE_KEYS = {
+  entries: 'nutritrack_entries',
+  profile: 'nutritrack_profile',
+  lastResetDate: 'nutritrack_last_reset_date',
+};
 
 const defaultProfile: UserProfile = {
   name: 'User',
@@ -9,67 +15,81 @@ const defaultProfile: UserProfile = {
   fatGoal: 65,
 };
 
-const sampleFoods: FoodEntry[] = [
-  {
-    id: '1',
-    name: 'Oatmeal with Berries',
-    calories: 320,
-    protein: 12,
-    carbs: 54,
-    fat: 6,
-    servingSize: '1 bowl',
-    mealType: 'breakfast',
-    timestamp: new Date(),
-  },
-  {
-    id: '2',
-    name: 'Greek Yogurt',
-    calories: 150,
-    protein: 15,
-    carbs: 12,
-    fat: 5,
-    servingSize: '1 cup',
-    mealType: 'breakfast',
-    timestamp: new Date(),
-  },
-  {
-    id: '3',
-    name: 'Grilled Chicken Salad',
-    calories: 450,
-    protein: 42,
-    carbs: 18,
-    fat: 22,
-    servingSize: '1 plate',
-    mealType: 'lunch',
-    timestamp: new Date(),
-  },
-  {
-    id: '4',
-    name: 'Salmon with Vegetables',
-    calories: 520,
-    protein: 45,
-    carbs: 22,
-    fat: 28,
-    servingSize: '1 portion',
-    mealType: 'dinner',
-    timestamp: new Date(),
-  },
-  {
-    id: '5',
-    name: 'Mixed Nuts',
-    calories: 180,
-    protein: 6,
-    carbs: 8,
-    fat: 16,
-    servingSize: '1 handful',
-    mealType: 'snacks',
-    timestamp: new Date(),
-  },
-];
+// Get today's date in Denmark timezone as YYYY-MM-DD
+const getDenmarkDateString = (): string => {
+  const now = new Date();
+  const denmarkDate = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Copenhagen',
+  }).format(now);
+  return denmarkDate;
+};
+
+// Load data from localStorage with daily reset check
+const loadStoredData = (): { entries: FoodEntry[]; profile: UserProfile } => {
+  const todayDenmark = getDenmarkDateString();
+  const storedLastReset = localStorage.getItem(STORAGE_KEYS.lastResetDate);
+  
+  // Load profile (always persisted)
+  let profile = defaultProfile;
+  const storedProfile = localStorage.getItem(STORAGE_KEYS.profile);
+  if (storedProfile) {
+    try {
+      profile = JSON.parse(storedProfile);
+    } catch {
+      profile = defaultProfile;
+    }
+  }
+  
+  // Check if we need to reset (new day in Denmark)
+  if (storedLastReset !== todayDenmark) {
+    // Reset entries for new day
+    localStorage.setItem(STORAGE_KEYS.lastResetDate, todayDenmark);
+    localStorage.setItem(STORAGE_KEYS.entries, JSON.stringify([]));
+    return { entries: [], profile };
+  }
+  
+  // Load entries for same day
+  let entries: FoodEntry[] = [];
+  const storedEntries = localStorage.getItem(STORAGE_KEYS.entries);
+  if (storedEntries) {
+    try {
+      entries = JSON.parse(storedEntries).map((e: FoodEntry) => ({
+        ...e,
+        timestamp: new Date(e.timestamp),
+      }));
+    } catch {
+      entries = [];
+    }
+  }
+  
+  return { entries, profile };
+};
 
 export const useNutritionStore = () => {
-  const [entries, setEntries] = useState<FoodEntry[]>(sampleFoods);
-  const [profile] = useState<UserProfile>(defaultProfile);
+  const [entries, setEntries] = useState<FoodEntry[]>(() => loadStoredData().entries);
+  const [profile, setProfile] = useState<UserProfile>(() => loadStoredData().profile);
+
+  // Check for daily reset on mount and when returning to dashboard
+  const checkDailyReset = useCallback(() => {
+    const todayDenmark = getDenmarkDateString();
+    const storedLastReset = localStorage.getItem(STORAGE_KEYS.lastResetDate);
+    
+    if (storedLastReset !== todayDenmark) {
+      localStorage.setItem(STORAGE_KEYS.lastResetDate, todayDenmark);
+      localStorage.setItem(STORAGE_KEYS.entries, JSON.stringify([]));
+      setEntries([]);
+    }
+  }, []);
+
+  // Persist entries to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.entries, JSON.stringify(entries));
+  }, [entries]);
+
+  // Persist profile to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profile));
+  }, [profile]);
 
   const addEntry = useCallback((entry: Omit<FoodEntry, 'id' | 'timestamp'>) => {
     const newEntry: FoodEntry = {
@@ -107,5 +127,6 @@ export const useNutritionStore = () => {
     removeEntry,
     getEntriesByMeal,
     getDailyProgress,
+    checkDailyReset,
   };
 };
