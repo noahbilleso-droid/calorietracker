@@ -21,6 +21,7 @@ export interface NutritionData {
   carbs: number;
   fat: number;
   servingSize: string;
+  sourceInfo?: string;
 }
 
 interface FoodConfirmationProps {
@@ -86,6 +87,13 @@ export const FoodConfirmation = ({
         {imagePreview && (
           <div className="w-full aspect-video rounded-lg overflow-hidden border">
             <img src={imagePreview} alt="Food" className="w-full h-full object-cover" />
+          </div>
+        )}
+
+        {initialData.sourceInfo && (
+          <div className="p-3 bg-muted/50 rounded-lg border">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Extraction Source (Debug)</p>
+            <p className="text-xs text-muted-foreground break-words">{initialData.sourceInfo}</p>
           </div>
         )}
 
