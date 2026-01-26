@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, X, Loader2, AlertCircle, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MealType } from '@/types/nutrition';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useUSDASearch, USDAFood, USDANutrients } from '@/hooks/useUSDASearch';
 import {
   Dialog,
   DialogContent,
@@ -34,21 +35,6 @@ interface AddFoodDialogProps {
   }) => void;
 }
 
-const foodDatabase = [
-  { name: 'Chicken Breast', calories: 165, protein: 31, carbs: 0, fat: 3.6, servingSize: '100g' },
-  { name: 'Brown Rice', calories: 216, protein: 5, carbs: 45, fat: 1.8, servingSize: '1 cup' },
-  { name: 'Banana', calories: 105, protein: 1.3, carbs: 27, fat: 0.4, servingSize: '1 medium' },
-  { name: 'Eggs', calories: 155, protein: 13, carbs: 1.1, fat: 11, servingSize: '2 large' },
-  { name: 'Avocado', calories: 234, protein: 3, carbs: 12, fat: 21, servingSize: '1 whole' },
-  { name: 'Salmon Fillet', calories: 208, protein: 20, carbs: 0, fat: 13, servingSize: '100g' },
-  { name: 'Greek Yogurt', calories: 100, protein: 17, carbs: 6, fat: 0.7, servingSize: '170g' },
-  { name: 'Almonds', calories: 164, protein: 6, carbs: 6, fat: 14, servingSize: '28g' },
-  { name: 'Sweet Potato', calories: 103, protein: 2.3, carbs: 24, fat: 0.1, servingSize: '1 medium' },
-  { name: 'Broccoli', calories: 55, protein: 3.7, carbs: 11, fat: 0.6, servingSize: '1 cup' },
-  { name: 'Oatmeal', calories: 150, protein: 5, carbs: 27, fat: 2.5, servingSize: '1 cup' },
-  { name: 'Whole Wheat Bread', calories: 81, protein: 4, carbs: 14, fat: 1, servingSize: '1 slice' },
-];
-
 const mealLabels: Record<MealType, string> = {
   breakfast: 'Breakfast',
   lunch: 'Lunch',
@@ -56,107 +42,295 @@ const mealLabels: Record<MealType, string> = {
   snacks: 'Snacks',
 };
 
-export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFoodDialogProps) => {
-  const [search, setSearch] = useState('');
-  const [selectedFood, setSelectedFood] = useState<typeof foodDatabase[0] | null>(null);
-  const isMobile = useIsMobile();
+interface SelectedFoodState {
+  food: USDAFood;
+  nutrientsPer100g: USDANutrients;
+  grams: number;
+  editedNutrients: USDANutrients;
+}
 
-  const filteredFoods = foodDatabase.filter(food =>
-    food.name.toLowerCase().includes(search.toLowerCase())
-  );
+export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFoodDialogProps) => {
+  const [selectedFood, setSelectedFood] = useState<SelectedFoodState | null>(null);
+  const [step, setStep] = useState<'search' | 'confirm'>('search');
+  const isMobile = useIsMobile();
+  
+  const { query, setQuery, results, isLoading, error, isConfigured } = useUSDASearch();
+
+  // Reset state when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setSelectedFood(null);
+      setStep('search');
+      setQuery('');
+    }
+  }, [open, setQuery]);
+
+  const handleSelectFood = (food: USDAFood & { nutrients: USDANutrients }) => {
+    setSelectedFood({
+      food,
+      nutrientsPer100g: food.nutrients,
+      grams: 100,
+      editedNutrients: { ...food.nutrients },
+    });
+    setStep('confirm');
+  };
+
+  const handleGramsChange = (grams: number) => {
+    if (!selectedFood) return;
+    
+    const scale = grams / 100;
+    setSelectedFood({
+      ...selectedFood,
+      grams,
+      editedNutrients: {
+        calories: Math.round(selectedFood.nutrientsPer100g.calories * scale),
+        protein: Math.round(selectedFood.nutrientsPer100g.protein * scale * 10) / 10,
+        carbs: Math.round(selectedFood.nutrientsPer100g.carbs * scale * 10) / 10,
+        fat: Math.round(selectedFood.nutrientsPer100g.fat * scale * 10) / 10,
+      },
+    });
+  };
+
+  const handleNutrientChange = (key: keyof USDANutrients, value: number) => {
+    if (!selectedFood) return;
+    setSelectedFood({
+      ...selectedFood,
+      editedNutrients: {
+        ...selectedFood.editedNutrients,
+        [key]: value,
+      },
+    });
+  };
 
   const handleAddFood = () => {
-    if (selectedFood) {
-      onAddFood({ ...selectedFood, mealType });
-      setSelectedFood(null);
-      setSearch('');
-      onOpenChange(false);
-    }
+    if (!selectedFood) return;
+    
+    onAddFood({
+      name: selectedFood.food.description,
+      calories: selectedFood.editedNutrients.calories,
+      protein: selectedFood.editedNutrients.protein,
+      carbs: selectedFood.editedNutrients.carbs,
+      fat: selectedFood.editedNutrients.fat,
+      servingSize: `${selectedFood.grams}g`,
+      mealType,
+    });
+    
+    handleClose();
   };
 
   const handleClose = () => {
     setSelectedFood(null);
-    setSearch('');
+    setStep('search');
+    setQuery('');
     onOpenChange(false);
   };
 
-  const pickerContent = (
+  const handleBack = () => {
+    setSelectedFood(null);
+    setStep('search');
+  };
+
+  // Search step content
+  const searchContent = (
     <div className="flex flex-col h-full">
       {/* Sticky search header */}
       <div className="sticky top-0 z-10 bg-background pb-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search foods..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search USDA foods..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
             className="pl-10"
+            autoFocus
           />
         </div>
       </div>
 
-      {/* Scrollable food list */}
-      <ScrollArea className="flex-1 -mx-1 px-1">
-        <div className="space-y-1 pb-4">
-          <AnimatePresence>
-            {filteredFoods.map((food) => (
-              <motion.button
-                key={food.name}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setSelectedFood(food)}
-                className={`w-full text-left p-3 rounded-lg transition-colors ${
-                  selectedFood?.name === food.name
-                    ? 'bg-primary/10 border-primary border'
-                    : 'hover:bg-muted border border-transparent'
-                }`}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-medium text-foreground">{food.name}</p>
-                    <p className="text-xs text-muted-foreground">{food.servingSize}</p>
-                  </div>
-                  <span className="text-sm font-medium text-primary">{food.calories} cal</span>
-                </div>
-                <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                  <span>P: {food.protein}g</span>
-                  <span>C: {food.carbs}g</span>
-                  <span>F: {food.fat}g</span>
-                </div>
-              </motion.button>
-            ))}
-          </AnimatePresence>
+      {/* API not configured message */}
+      {!isConfigured && (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <AlertCircle className="w-8 h-8 text-muted-foreground mb-2" />
+          <p className="text-muted-foreground">USDA food search not configured</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Add VITE_USDA_API_KEY to enable search
+          </p>
         </div>
-      </ScrollArea>
+      )}
 
-      {/* Selected food action */}
-      {selectedFood && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="pt-4 border-t border-border mt-auto"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="font-medium text-foreground">{selectedFood.name}</p>
-              <p className="text-sm text-muted-foreground">{selectedFood.servingSize}</p>
-            </div>
-            <button
-              onClick={() => setSelectedFood(null)}
-              className="p-1 hover:bg-muted rounded"
-            >
-              <X className="w-4 h-4 text-muted-foreground" />
-            </button>
+      {/* Loading state */}
+      {isConfigured && isLoading && (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        </div>
+      )}
+
+      {/* Error state */}
+      {isConfigured && error && !isLoading && (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <AlertCircle className="w-8 h-8 text-destructive mb-2" />
+          <p className="text-muted-foreground">{error}</p>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {isConfigured && !isLoading && !error && query.length < 2 && (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <Search className="w-8 h-8 text-muted-foreground mb-2" />
+          <p className="text-muted-foreground">Type at least 2 characters to search</p>
+        </div>
+      )}
+
+      {/* No results */}
+      {isConfigured && !isLoading && !error && query.length >= 2 && results.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <p className="text-muted-foreground">No foods found for "{query}"</p>
+        </div>
+      )}
+
+      {/* Results list */}
+      {isConfigured && !isLoading && results.length > 0 && (
+        <ScrollArea className="flex-1 -mx-1 px-1">
+          <div className="space-y-1 pb-4">
+            <AnimatePresence>
+              {results.map((food) => (
+                <motion.button
+                  key={food.fdcId}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => handleSelectFood(food)}
+                  className="w-full text-left p-3 rounded-lg transition-colors hover:bg-muted border border-transparent"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-foreground truncate">{food.description}</p>
+                      {food.foodCategory && (
+                        <p className="text-xs text-muted-foreground truncate">{food.foodCategory}</p>
+                      )}
+                    </div>
+                    <span className="text-sm font-medium text-primary whitespace-nowrap">
+                      {food.nutrients.calories} cal
+                    </span>
+                  </div>
+                  <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                    <span>P: {food.nutrients.protein}g</span>
+                    <span>C: {food.nutrients.carbs}g</span>
+                    <span>F: {food.nutrients.fat}g</span>
+                    <span className="text-muted-foreground/60">per 100g</span>
+                  </div>
+                </motion.button>
+              ))}
+            </AnimatePresence>
           </div>
-          <Button onClick={handleAddFood} className="w-full">
-            Add {selectedFood.calories} calories
-          </Button>
-        </motion.div>
+        </ScrollArea>
       )}
     </div>
   );
+
+  // Confirmation step content
+  const confirmContent = selectedFood && (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto">
+        <div className="space-y-4">
+          {/* Food name */}
+          <div>
+            <h3 className="font-semibold text-foreground">{selectedFood.food.description}</h3>
+            {selectedFood.food.foodCategory && (
+              <p className="text-sm text-muted-foreground">{selectedFood.food.foodCategory}</p>
+            )}
+          </div>
+
+          {/* Portion size */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Portion Size (grams)</label>
+            <Input
+              type="number"
+              value={selectedFood.grams}
+              onChange={(e) => handleGramsChange(Math.max(1, parseInt(e.target.value) || 0))}
+              min={1}
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground">
+              Nutrition values scale automatically based on portion size
+            </p>
+          </div>
+
+          {/* Editable nutrients */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Calories</label>
+              <Input
+                type="number"
+                value={selectedFood.editedNutrients.calories}
+                onChange={(e) => handleNutrientChange('calories', parseInt(e.target.value) || 0)}
+                min={0}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Protein (g)</label>
+              <Input
+                type="number"
+                step="0.1"
+                value={selectedFood.editedNutrients.protein}
+                onChange={(e) => handleNutrientChange('protein', parseFloat(e.target.value) || 0)}
+                min={0}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Carbs (g)</label>
+              <Input
+                type="number"
+                step="0.1"
+                value={selectedFood.editedNutrients.carbs}
+                onChange={(e) => handleNutrientChange('carbs', parseFloat(e.target.value) || 0)}
+                min={0}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Fat (g)</label>
+              <Input
+                type="number"
+                step="0.1"
+                value={selectedFood.editedNutrients.fat}
+                onChange={(e) => handleNutrientChange('fat', parseFloat(e.target.value) || 0)}
+                min={0}
+              />
+            </div>
+          </div>
+
+          {/* Summary */}
+          <div className="bg-muted/50 rounded-lg p-3">
+            <p className="text-sm font-medium text-foreground mb-1">Summary</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              <span>{selectedFood.editedNutrients.calories} kcal</span>
+              <span>P: {selectedFood.editedNutrients.protein}g</span>
+              <span>C: {selectedFood.editedNutrients.carbs}g</span>
+              <span>F: {selectedFood.editedNutrients.fat}g</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div 
+        className="flex gap-3 pt-4 border-t border-border mt-auto"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <Button variant="outline" onClick={handleBack} className="flex-1">
+          Cancel
+        </Button>
+        <Button onClick={handleAddFood} className="flex-1">
+          Add to Today
+        </Button>
+      </div>
+    </div>
+  );
+
+  const currentContent = step === 'search' ? searchContent : confirmContent;
+  const currentTitle = step === 'search' 
+    ? `Add to ${mealLabels[mealType]}` 
+    : 'Confirm Food';
 
   // Mobile: Full-screen Sheet
   if (isMobile) {
@@ -169,7 +343,17 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
         >
           <SheetHeader className="px-4 pt-4 pb-2 border-b border-border flex-shrink-0">
             <div className="flex items-center justify-between">
-              <SheetTitle>Add to {mealLabels[mealType]}</SheetTitle>
+              <div className="flex items-center gap-2">
+                {step === 'confirm' && (
+                  <button
+                    onClick={handleBack}
+                    className="p-1 -ml-1 hover:bg-muted rounded"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-muted-foreground" />
+                  </button>
+                )}
+                <SheetTitle>{currentTitle}</SheetTitle>
+              </div>
               <button
                 onClick={handleClose}
                 className="p-2 -mr-2 hover:bg-muted rounded-full"
@@ -179,7 +363,7 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
             </div>
           </SheetHeader>
           <div className="flex-1 overflow-hidden px-4 pt-3 flex flex-col min-h-0">
-            {pickerContent}
+            {currentContent}
           </div>
         </SheetContent>
       </Sheet>
@@ -191,10 +375,20 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Add to {mealLabels[mealType]}</DialogTitle>
+          <div className="flex items-center gap-2">
+            {step === 'confirm' && (
+              <button
+                onClick={handleBack}
+                className="p-1 -ml-1 hover:bg-muted rounded"
+              >
+                <ChevronLeft className="w-5 h-5 text-muted-foreground" />
+              </button>
+            )}
+            <DialogTitle>{currentTitle}</DialogTitle>
+          </div>
         </DialogHeader>
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-          {pickerContent}
+          {currentContent}
         </div>
       </DialogContent>
     </Dialog>
