@@ -4,12 +4,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MealType } from '@/types/nutrition';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface AddFoodDialogProps {
   open: boolean;
@@ -51,6 +59,7 @@ const mealLabels: Record<MealType, string> = {
 export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFoodDialogProps) => {
   const [search, setSearch] = useState('');
   const [selectedFood, setSelectedFood] = useState<typeof foodDatabase[0] | null>(null);
+  const isMobile = useIsMobile();
 
   const filteredFoods = foodDatabase.filter(food =>
     food.name.toLowerCase().includes(search.toLowerCase())
@@ -65,13 +74,16 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
     }
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Add to {mealLabels[mealType]}</DialogTitle>
-        </DialogHeader>
-        
+  const handleClose = () => {
+    setSelectedFood(null);
+    setSearch('');
+    onOpenChange(false);
+  };
+
+  const pickerContent = (
+    <div className="flex flex-col h-full">
+      {/* Sticky search header */}
+      <div className="sticky top-0 z-10 bg-background pb-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -81,8 +93,11 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
             className="pl-10"
           />
         </div>
+      </div>
 
-        <div className="max-h-64 overflow-y-auto space-y-1">
+      {/* Scrollable food list */}
+      <ScrollArea className="flex-1 -mx-1 px-1">
+        <div className="space-y-1 pb-4">
           <AnimatePresence>
             {filteredFoods.map((food) => (
               <motion.button
@@ -113,30 +128,74 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
             ))}
           </AnimatePresence>
         </div>
+      </ScrollArea>
 
-        {selectedFood && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="pt-4 border-t border-border"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="font-medium text-foreground">{selectedFood.name}</p>
-                <p className="text-sm text-muted-foreground">{selectedFood.servingSize}</p>
-              </div>
+      {/* Selected food action */}
+      {selectedFood && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="pt-4 border-t border-border mt-auto"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="font-medium text-foreground">{selectedFood.name}</p>
+              <p className="text-sm text-muted-foreground">{selectedFood.servingSize}</p>
+            </div>
+            <button
+              onClick={() => setSelectedFood(null)}
+              className="p-1 hover:bg-muted rounded"
+            >
+              <X className="w-4 h-4 text-muted-foreground" />
+            </button>
+          </div>
+          <Button onClick={handleAddFood} className="w-full">
+            Add {selectedFood.calories} calories
+          </Button>
+        </motion.div>
+      )}
+    </div>
+  );
+
+  // Mobile: Full-screen Sheet
+  if (isMobile) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent 
+          side="bottom" 
+          className="h-[100dvh] w-screen rounded-none border-0 flex flex-col p-0"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        >
+          <SheetHeader className="px-4 pt-4 pb-2 border-b border-border flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <SheetTitle>Add to {mealLabels[mealType]}</SheetTitle>
               <button
-                onClick={() => setSelectedFood(null)}
-                className="p-1 hover:bg-muted rounded"
+                onClick={handleClose}
+                className="p-2 -mr-2 hover:bg-muted rounded-full"
               >
-                <X className="w-4 h-4 text-muted-foreground" />
+                <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
-            <Button onClick={handleAddFood} className="w-full">
-              Add {selectedFood.calories} calories
-            </Button>
-          </motion.div>
-        )}
+          </SheetHeader>
+          <div className="flex-1 overflow-hidden px-4 pt-3 flex flex-col min-h-0">
+            {pickerContent}
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  // Desktop: Centered Dialog
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Add to {mealLabels[mealType]}</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+          {pickerContent}
+        </div>
       </DialogContent>
     </Dialog>
   );
