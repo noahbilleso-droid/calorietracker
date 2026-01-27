@@ -138,7 +138,7 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search USDA foods..."
+            placeholder="Search foods..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="pl-10"
@@ -151,9 +151,9 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
       {!isConfigured && (
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <AlertCircle className="w-8 h-8 text-muted-foreground mb-2" />
-          <p className="text-muted-foreground">USDA food search not configured</p>
+          <p className="text-muted-foreground">Food search not configured</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Add VITE_USDA_API_KEY to enable search
+            Add API key to enable search
           </p>
         </div>
       )}
