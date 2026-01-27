@@ -115,7 +115,7 @@ export function useUSDASearch() {
   useEffect(() => {
     if (!apiKey) {
       setIsConfigured(false);
-      setError('USDA food search not configured');
+      setError('Food search not configured');
     }
   }, [apiKey]);
 
@@ -157,7 +157,7 @@ export function useUSDASearch() {
 
       setResults(foods);
     } catch (err) {
-      console.error('USDA search error:', err);
+      console.error('Food search error:', err);
       setError('Failed to search foods');
       setResults([]);
     } finally {
