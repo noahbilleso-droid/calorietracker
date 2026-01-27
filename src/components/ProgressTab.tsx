@@ -1,19 +1,86 @@
 import { motion } from 'framer-motion';
-import { TrendingUp, Flame, Target, Award } from 'lucide-react';
-
-const weeklyData = [
-  { day: 'Mon', calories: 1850, goal: 2000 },
-  { day: 'Tue', calories: 2100, goal: 2000 },
-  { day: 'Wed', calories: 1920, goal: 2000 },
-  { day: 'Thu', calories: 1780, goal: 2000 },
-  { day: 'Fri', calories: 2200, goal: 2000 },
-  { day: 'Sat', calories: 1650, goal: 2000 },
-  { day: 'Sun', calories: 1620, goal: 2000 },
-];
+import { TrendingUp, Flame, Target, Award, CalendarX } from 'lucide-react';
+import { useNutritionStore } from '@/hooks/useNutritionStore';
 
 export const ProgressTab = () => {
-  const avgCalories = Math.round(weeklyData.reduce((sum, d) => sum + d.calories, 0) / weeklyData.length);
-  const maxHeight = Math.max(...weeklyData.map(d => d.calories));
+  const { computeStats } = useNutritionStore();
+  const stats = computeStats();
+  
+  const maxHeight = stats.weeklyData.length > 0 
+    ? Math.max(...stats.weeklyData.map(d => d.calories), 1)
+    : 1;
+
+  // Empty state
+  if (!stats.hasAnyLogs) {
+    return (
+      <div className="min-h-screen bg-background pb-24">
+        <header className="px-4 pt-8 pb-4">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <h1 className="text-2xl font-bold text-foreground">Your Progress</h1>
+            <p className="text-muted-foreground text-sm">Track your nutrition journey</p>
+          </motion.div>
+        </header>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="px-4 flex flex-col items-center justify-center py-16 text-center"
+        >
+          <CalendarX className="w-16 h-16 text-muted-foreground mb-4" />
+          <h2 className="text-lg font-semibold text-foreground mb-2">No progress yet</h2>
+          <p className="text-muted-foreground text-sm max-w-xs">
+            Log foods to see progress. Your daily totals will appear here as you track your meals.
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  const statsCards = [
+    { 
+      icon: Flame, 
+      label: 'Streak', 
+      value: stats.streak === 1 ? '1 day' : `${stats.streak} days`, 
+      color: 'text-nutrition-carbs' 
+    },
+    { 
+      icon: Target, 
+      label: 'Avg. Calories', 
+      value: stats.avgCalories.toLocaleString(), 
+      color: 'text-primary' 
+    },
+    { 
+      icon: TrendingUp, 
+      label: 'On Track', 
+      value: stats.onTrackTotal > 0 ? `${stats.onTrackDays}/${stats.onTrackTotal} days` : '0 days', 
+      color: 'text-nutrition-protein' 
+    },
+    { 
+      icon: Award, 
+      label: 'Best Week', 
+      value: stats.bestWeekLabel, 
+      color: 'text-nutrition-fat' 
+    },
+  ];
+
+  // Message based on performance
+  const getMotivationMessage = () => {
+    if (stats.onTrackTotal === 0) {
+      return "Start tracking to see how you're doing this week!";
+    }
+    const percentage = stats.onTrackDays / stats.onTrackTotal;
+    if (percentage >= 0.8) {
+      return `Great job! You've stayed under your calorie goal for ${stats.onTrackDays} out of ${stats.onTrackTotal} days this week. Keep up the momentum! 💪`;
+    } else if (percentage >= 0.5) {
+      return `Good progress! You're on track ${stats.onTrackDays} out of ${stats.onTrackTotal} days. Keep pushing! 🎯`;
+    } else {
+      return `You've been on track ${stats.onTrackDays} out of ${stats.onTrackTotal} days. Every day is a new opportunity! 🌟`;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -29,12 +96,7 @@ export const ProgressTab = () => {
 
       {/* Stats Cards */}
       <div className="px-4 grid grid-cols-2 gap-3 mb-6">
-        {[
-          { icon: Flame, label: 'Streak', value: '7 days', color: 'text-nutrition-carbs' },
-          { icon: Target, label: 'Avg. Calories', value: avgCalories.toString(), color: 'text-primary' },
-          { icon: TrendingUp, label: 'On Track', value: '5/7 days', color: 'text-nutrition-protein' },
-          { icon: Award, label: 'Best Week', value: 'This week!', color: 'text-nutrition-fat' },
-        ].map((stat, index) => (
+        {statsCards.map((stat, index) => (
           <motion.div
             key={stat.label}
             initial={{ opacity: 0, y: 20 }}
@@ -60,8 +122,8 @@ export const ProgressTab = () => {
           <h2 className="font-semibold text-foreground mb-4">This Week</h2>
           
           <div className="flex items-end justify-between gap-2 h-40">
-            {weeklyData.map((day, index) => {
-              const height = (day.calories / maxHeight) * 100;
+            {stats.weeklyData.map((day, index) => {
+              const height = day.hasData ? (day.calories / maxHeight) * 100 : 5;
               const isUnderGoal = day.calories <= day.goal;
 
               return (
@@ -71,10 +133,14 @@ export const ProgressTab = () => {
                     animate={{ height: `${height}%` }}
                     transition={{ delay: 0.4 + index * 0.05, duration: 0.5 }}
                     className={`w-full rounded-t-md ${
-                      isUnderGoal ? 'bg-primary' : 'bg-nutrition-carbs'
+                      !day.hasData 
+                        ? 'bg-muted' 
+                        : isUnderGoal 
+                          ? 'bg-primary' 
+                          : 'bg-nutrition-carbs'
                     }`}
                   />
-                  <span className="text-xs text-muted-foreground">{day.day}</span>
+                  <span className="text-xs text-muted-foreground">{day.dayLabel}</span>
                 </div>
               );
             })}
@@ -89,11 +155,15 @@ export const ProgressTab = () => {
               <div className="w-3 h-3 rounded bg-nutrition-carbs" />
               <span className="text-xs text-muted-foreground">Over goal</span>
             </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-muted" />
+              <span className="text-xs text-muted-foreground">No data</span>
+            </div>
           </div>
         </div>
       </motion.section>
 
-      {/* Goal line indicator */}
+      {/* Motivation message */}
       <motion.section
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -102,7 +172,7 @@ export const ProgressTab = () => {
       >
         <div className="bg-accent rounded-lg p-4">
           <p className="text-sm text-accent-foreground">
-            <strong>Great job!</strong> You've stayed under your calorie goal for 5 out of 7 days this week. Keep up the momentum! 💪
+            <strong>{stats.streak > 0 ? 'Keep it up!' : 'Get started!'}</strong> {getMotivationMessage()}
           </p>
         </div>
       </motion.section>

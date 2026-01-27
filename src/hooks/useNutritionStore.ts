@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { FoodEntry, MealType, DailyProgress, UserProfile } from '@/types/nutrition';
+import { useDayLogs, getDenmarkDateString } from './useDayLogs';
 
 const STORAGE_KEYS = {
   entries: 'nutritrack_entries',
@@ -13,15 +14,6 @@ const defaultProfile: UserProfile = {
   proteinGoal: 150,
   carbsGoal: 250,
   fatGoal: 65,
-};
-
-// Get today's date in Denmark timezone as YYYY-MM-DD
-const getDenmarkDateString = (): string => {
-  const now = new Date();
-  const denmarkDate = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Copenhagen',
-  }).format(now);
-  return denmarkDate;
 };
 
 // Load data from localStorage with daily reset check
@@ -68,6 +60,7 @@ const loadStoredData = (): { entries: FoodEntry[]; profile: UserProfile } => {
 export const useNutritionStore = () => {
   const [entries, setEntries] = useState<FoodEntry[]>(() => loadStoredData().entries);
   const [profile, setProfile] = useState<UserProfile>(() => loadStoredData().profile);
+  const { upsertTodayLog, clearHistory, computeStats, dayLogs } = useDayLogs();
 
   // Check for daily reset on mount and when returning to dashboard
   const checkDailyReset = useCallback(() => {
@@ -90,6 +83,27 @@ export const useNutritionStore = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profile));
   }, [profile]);
+
+  // Update today's day log whenever entries or profile change
+  useEffect(() => {
+    const totals = entries.reduce(
+      (acc, entry) => ({
+        calories: acc.calories + entry.calories,
+        protein: acc.protein + entry.protein,
+        carbs: acc.carbs + entry.carbs,
+        fat: acc.fat + entry.fat,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
+
+    upsertTodayLog({
+      calories: totals.calories,
+      protein: totals.protein,
+      carbs: totals.carbs,
+      fat: totals.fat,
+      goalCalories: profile.dailyCalorieGoal,
+    });
+  }, [entries, profile.dailyCalorieGoal, upsertTodayLog]);
 
   const addEntry = useCallback((entry: Omit<FoodEntry, 'id' | 'timestamp'>) => {
     const newEntry: FoodEntry = {
@@ -128,5 +142,8 @@ export const useNutritionStore = () => {
     getEntriesByMeal,
     getDailyProgress,
     checkDailyReset,
+    clearHistory,
+    computeStats,
+    dayLogs,
   };
 };
