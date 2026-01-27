@@ -142,7 +142,6 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="pl-10"
-            autoFocus
           />
         </div>
       </div>
@@ -338,8 +337,11 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent 
           side="bottom" 
-          className="h-[100dvh] w-screen rounded-none border-0 flex flex-col p-0"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+          className="fixed inset-0 h-[100dvh] w-screen rounded-none border-0 flex flex-col p-0"
+          style={{ 
+            paddingTop: 'env(safe-area-inset-top, 0px)',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)' 
+          }}
         >
           <SheetHeader className="px-4 pt-4 pb-2 border-b border-border flex-shrink-0">
             <div className="flex items-center justify-between">
@@ -362,7 +364,7 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
               </button>
             </div>
           </SheetHeader>
-          <div className="flex-1 overflow-hidden px-4 pt-3 flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto px-4 pt-3 flex flex-col min-h-0">
             {currentContent}
           </div>
         </SheetContent>
