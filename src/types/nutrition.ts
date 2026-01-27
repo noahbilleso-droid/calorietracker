@@ -33,3 +33,12 @@ export interface UserProfile {
   carbsGoal: number;
   fatGoal: number;
 }
+
+export interface DayLog {
+  date: string; // YYYY-MM-DD (Europe/Copenhagen)
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  goalCalories: number;
+}
