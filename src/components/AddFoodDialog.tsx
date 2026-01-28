@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef } from 'react';
 import { Search, X, Loader2, AlertCircle, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MealType } from '@/types/nutrition';
@@ -12,12 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface AddFoodDialogProps {
@@ -49,16 +43,28 @@ interface SelectedFoodState {
   editedNutrients: USDANutrients;
 }
 
+// ForwardRef wrapper for motion.button to fix AnimatePresence ref warning
+const MotionButton = forwardRef<HTMLButtonElement, React.ComponentProps<typeof motion.button>>(
+  (props, ref) => <motion.button ref={ref} {...props} />
+);
+MotionButton.displayName = 'MotionButton';
+
 export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFoodDialogProps) => {
   const [selectedFood, setSelectedFood] = useState<SelectedFoodState | null>(null);
   const [step, setStep] = useState<'search' | 'confirm'>('search');
+  const [mounted, setMounted] = useState(false);
   const isMobile = useIsMobile();
   
   const { query, setQuery, results, isLoading, error, isConfigured } = useUSDASearch();
 
-  // Reset state when dialog closes
+  // Delay content mount to prevent layout issues on first open
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      requestAnimationFrame(() => {
+        setMounted(true);
+      });
+    } else {
+      setMounted(false);
       setSelectedFood(null);
       setStep('search');
       setQuery('');
@@ -191,9 +197,9 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
       {isConfigured && !isLoading && results.length > 0 && (
         <ScrollArea className="flex-1 -mx-1 px-1">
           <div className="space-y-1 pb-4">
-            <AnimatePresence>
+            <AnimatePresence mode="popLayout">
               {results.map((food) => (
-                <motion.button
+                <MotionButton
                   key={food.fdcId}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -218,7 +224,7 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
                     <span>F: {food.nutrients.fat}g</span>
                     <span className="text-muted-foreground/60">per 100g</span>
                   </div>
-                </motion.button>
+                </MotionButton>
               ))}
             </AnimatePresence>
           </div>
@@ -331,19 +337,19 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
     ? `Add to ${mealLabels[mealType]}` 
     : 'Confirm Food';
 
-  // Mobile: Full-screen Sheet
+  // Mobile: Full-screen Dialog with fixed positioning
   if (isMobile) {
     return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent 
-          side="bottom" 
-          className="fixed inset-0 h-[100dvh] w-screen rounded-none border-0 flex flex-col p-0"
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent 
+          className="fixed inset-0 h-[100dvh] w-screen max-w-none rounded-none border-0 flex flex-col p-0 translate-x-0 translate-y-0 data-[state=open]:slide-in-from-bottom-0 data-[state=closed]:slide-out-to-bottom-0"
           style={{ 
             paddingTop: 'env(safe-area-inset-top, 0px)',
-            paddingBottom: 'env(safe-area-inset-bottom, 0px)' 
           }}
+          onOpenAutoFocus={(e) => e.preventDefault()}
         >
-          <SheetHeader className="px-4 pt-4 pb-2 border-b border-border flex-shrink-0">
+          {/* Fixed header */}
+          <div className="px-4 pt-4 pb-2 border-b border-border flex-shrink-0 bg-background">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {step === 'confirm' && (
@@ -354,7 +360,7 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
                     <ChevronLeft className="w-5 h-5 text-muted-foreground" />
                   </button>
                 )}
-                <SheetTitle>{currentTitle}</SheetTitle>
+                <DialogTitle>{currentTitle}</DialogTitle>
               </div>
               <button
                 onClick={handleClose}
@@ -363,19 +369,27 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
-          </SheetHeader>
-          <div className="flex-1 overflow-y-auto px-4 pt-3 flex flex-col min-h-0">
-            {currentContent}
           </div>
-        </SheetContent>
-      </Sheet>
+          
+          {/* Scrollable content */}
+          <div 
+            className="flex-1 overflow-y-auto px-4 pt-3 flex flex-col min-h-0"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
+          >
+            {mounted && currentContent}
+          </div>
+        </DialogContent>
+      </Dialog>
     );
   }
 
   // Desktop: Centered Dialog
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[80vh] flex flex-col">
+      <DialogContent 
+        className="sm:max-w-md max-h-[80vh] flex flex-col"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <div className="flex items-center gap-2">
             {step === 'confirm' && (
@@ -390,7 +404,7 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
           </div>
         </DialogHeader>
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-          {currentContent}
+          {mounted && currentContent}
         </div>
       </DialogContent>
     </Dialog>
