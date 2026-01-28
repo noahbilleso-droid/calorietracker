@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Target, Scale, Ruler, Activity, Trash2 } from 'lucide-react';
+import { User, Target, Scale, Ruler, Activity, Trash2, Sun, Moon, Monitor } from 'lucide-react';
 import { useNutritionStore } from '@/hooks/useNutritionStore';
+import { useTheme } from '@/hooks/useTheme';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -17,7 +18,14 @@ import {
 
 export const ProfileTab = () => {
   const { profile, clearHistory, dayLogs } = useNutritionStore();
+  const { theme, setTheme } = useTheme();
   const [showCleared, setShowCleared] = useState(false);
+
+  const themeOptions = [
+    { value: 'light' as const, icon: Sun, label: 'Light' },
+    { value: 'dark' as const, icon: Moon, label: 'Dark' },
+    { value: 'system' as const, icon: Monitor, label: 'System' },
+  ];
 
   const stats = [
     { icon: Target, label: 'Daily Goal', value: `${profile.dailyCalorieGoal.toLocaleString()} cal` },
@@ -112,6 +120,37 @@ export const ProfileTab = () => {
               </span>
             </div>
           ))}
+        </div>
+      </motion.section>
+
+      {/* Appearance Section */}
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.45 }}
+        className="px-4 mt-6"
+      >
+        <h3 className="text-sm font-semibold text-foreground mb-3">Appearance</h3>
+        <div className="bg-card rounded-lg p-4 border border-border shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-foreground">Theme</p>
+            <div className="flex bg-muted rounded-lg p-1 gap-1">
+              {themeOptions.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setTheme(option.value)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    theme === option.value
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <option.icon className="w-3.5 h-3.5" />
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </motion.section>
 
