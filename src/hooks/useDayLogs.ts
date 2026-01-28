@@ -100,29 +100,20 @@ export const useDayLogs = () => {
   // Compute progress stats
   const computeStats = useCallback((): ProgressStats => {
     const today = getDenmarkDateString();
-    const sortedLogs = [...dayLogs].sort((a, b) => b.date.localeCompare(a.date));
     
     // Check if there are any logs at all
     const hasAnyLogs = dayLogs.length > 0;
 
-    // 1. Calculate streak (consecutive days with any logged food)
+    // 1. Calculate streak: consecutive days (including today) where calories > 0 AND calories <= goalCalories
     let streak = 0;
     let checkDate = new Date();
     
-    // Check if today has any logged data
-    const todayLog = dayLogs.find(log => log.date === today);
-    const todayHasData = todayLog && (todayLog.calories > 0);
-    
-    if (todayHasData) {
-      streak = 1;
-      checkDate.setDate(checkDate.getDate() - 1);
-    }
-    
-    // Check previous days
     while (true) {
       const dateStr = getDenmarkDateString(checkDate);
       const log = dayLogs.find(l => l.date === dateStr);
-      if (log && log.calories > 0) {
+      
+      // Streak requires: has data, calories > 0, AND under/at goal
+      if (log && log.calories > 0 && log.calories <= log.goalCalories) {
         streak++;
         checkDate.setDate(checkDate.getDate() - 1);
       } else {
@@ -130,65 +121,81 @@ export const useDayLogs = () => {
       }
     }
 
-    // 2. Average calories over last 7 days with logs
-    const last7DaysLogs = sortedLogs
-      .filter(log => log.calories > 0)
-      .slice(0, 7);
+    // 2. Get last 7 days date strings
+    const last7Days: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      last7Days.push(getDenmarkDateString(d));
+    }
+
+    // 3. Average calories over last 7 days that have data (calories > 0)
+    const last7DaysLogs = dayLogs.filter(log => 
+      last7Days.includes(log.date) && log.calories > 0
+    );
     
     const avgCalories = last7DaysLogs.length > 0
       ? Math.round(last7DaysLogs.reduce((sum, log) => sum + log.calories, 0) / last7DaysLogs.length)
       : 0;
 
-    // 3. On track days this week
-    const thisWeekStart = getWeekStart(today);
-    const thisWeekDays = getWeekDays(thisWeekStart);
-    const thisWeekLogs = dayLogs.filter(log => thisWeekDays.includes(log.date) && log.calories > 0);
-    const onTrackDays = thisWeekLogs.filter(log => log.calories <= log.goalCalories).length;
-    const onTrackTotal = thisWeekLogs.length;
+    // 4. On Track: X/Y days under goal in last 7 days (only count days with calories > 0)
+    const onTrackDays = last7DaysLogs.filter(log => log.calories <= log.goalCalories).length;
+    const onTrackTotal = last7DaysLogs.length;
 
-    // 4. Best week ever
-    const logsByWeek = new Map<string, DayLog[]>();
-    dayLogs.forEach(log => {
-      const weekStart = getWeekStart(log.date);
-      if (!logsByWeek.has(weekStart)) {
-        logsByWeek.set(weekStart, []);
-      }
-      logsByWeek.get(weekStart)!.push(log);
-    });
-
-    let bestWeekStart = '';
+    // 5. Best Week: max "on track" days in any rolling 7-day window in history
     let bestWeekOnTrack = 0;
     
-    logsByWeek.forEach((logs, weekStart) => {
-      const onTrack = logs.filter(log => log.calories > 0 && log.calories <= log.goalCalories).length;
-      if (onTrack > bestWeekOnTrack) {
-        bestWeekOnTrack = onTrack;
-        bestWeekStart = weekStart;
-      }
-    });
-
-    // Format best week label
-    let bestWeekLabel = 'No data yet';
-    if (bestWeekStart) {
-      if (bestWeekStart === thisWeekStart) {
-        bestWeekLabel = 'This week!';
-      } else {
-        const date = new Date(bestWeekStart + 'T12:00:00');
-        bestWeekLabel = new Intl.DateTimeFormat('en-US', { 
-          month: 'short', 
-          day: 'numeric',
-          timeZone: 'Europe/Copenhagen'
-        }).format(date);
+    if (dayLogs.length > 0) {
+      // Get all unique dates sorted
+      const allDates = [...new Set(dayLogs.map(l => l.date))].sort();
+      
+      if (allDates.length > 0) {
+        // For each possible 7-day window ending on each date
+        const oldestDate = new Date(allDates[0] + 'T12:00:00');
+        const newestDate = new Date(allDates[allDates.length - 1] + 'T12:00:00');
+        
+        let windowEnd = new Date(newestDate);
+        
+        while (windowEnd >= oldestDate) {
+          // Get 7 days ending on windowEnd
+          const windowDates: string[] = [];
+          for (let i = 0; i < 7; i++) {
+            const d = new Date(windowEnd);
+            d.setDate(windowEnd.getDate() - i);
+            windowDates.push(getDenmarkDateString(d));
+          }
+          
+          // Count on-track days in this window
+          const windowOnTrack = dayLogs.filter(log => 
+            windowDates.includes(log.date) && 
+            log.calories > 0 && 
+            log.calories <= log.goalCalories
+          ).length;
+          
+          if (windowOnTrack > bestWeekOnTrack) {
+            bestWeekOnTrack = windowOnTrack;
+          }
+          
+          // Move window back by 1 day
+          windowEnd.setDate(windowEnd.getDate() - 1);
+        }
       }
     }
 
-    // 5. Weekly chart data
-    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const weeklyData = thisWeekDays.map((dateStr, index) => {
+    const bestWeekLabel = bestWeekOnTrack > 0 ? `${bestWeekOnTrack} days` : 'No data yet';
+
+    // 6. Weekly chart data: last 7 days (today back to 6 days ago)
+    const weeklyData = last7Days.reverse().map((dateStr) => {
       const log = dayLogs.find(l => l.date === dateStr);
+      const date = new Date(dateStr + 'T12:00:00');
+      const dayLabel = new Intl.DateTimeFormat('en-US', { 
+        weekday: 'short',
+        timeZone: 'Europe/Copenhagen'
+      }).format(date);
+      
       return {
         day: dateStr,
-        dayLabel: dayLabels[index],
+        dayLabel,
         calories: log?.calories || 0,
         goal: log?.goalCalories || 2000,
         hasData: log ? log.calories > 0 : false,
