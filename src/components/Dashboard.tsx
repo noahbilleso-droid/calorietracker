@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Scan } from 'lucide-react';
+import { Scan, Loader2 } from 'lucide-react';
 import { CalorieRing } from './CalorieRing';
 import { MacroProgress } from './MacroProgress';
 import { MealCard } from './MealCard';
@@ -11,7 +11,7 @@ import { useNutritionStore } from '@/hooks/useNutritionStore';
 import { MealType } from '@/types/nutrition';
 
 export const Dashboard = () => {
-  const { profile, getEntriesByMeal, getDailyProgress, addEntry, removeEntry, checkDailyReset } = useNutritionStore();
+  const { profile, getEntriesByMeal, getDailyProgress, addEntry, removeEntry, checkDailyReset, loading } = useNutritionStore();
   const [addFoodMeal, setAddFoodMeal] = useState<MealType | null>(null);
   const [scanSheetOpen, setScanSheetOpen] = useState(false);
 
@@ -28,6 +28,14 @@ export const Dashboard = () => {
     month: 'short',
     day: 'numeric',
   });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-24">

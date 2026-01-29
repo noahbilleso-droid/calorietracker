@@ -14,7 +14,81 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      daily_logs: {
+        Row: {
+          calories: number
+          carbs: number
+          created_at: string
+          day_date: string
+          fat: number
+          goal_calories: number
+          id: string
+          protein: number
+          user_id: string
+        }
+        Insert: {
+          calories?: number
+          carbs?: number
+          created_at?: string
+          day_date: string
+          fat?: number
+          goal_calories?: number
+          id?: string
+          protein?: number
+          user_id: string
+        }
+        Update: {
+          calories?: number
+          carbs?: number
+          created_at?: string
+          day_date?: string
+          fat?: number
+          goal_calories?: number
+          id?: string
+          protein?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      food_entries: {
+        Row: {
+          calories: number
+          carbs: number
+          created_at: string
+          day_date: string
+          fat: number
+          id: string
+          meal_type: string
+          name: string
+          protein: number
+          user_id: string
+        }
+        Insert: {
+          calories?: number
+          carbs?: number
+          created_at?: string
+          day_date: string
+          fat?: number
+          id?: string
+          meal_type: string
+          name: string
+          protein?: number
+          user_id: string
+        }
+        Update: {
+          calories?: number
+          carbs?: number
+          created_at?: string
+          day_date?: string
+          fat?: number
+          id?: string
+          meal_type?: string
+          name?: string
+          protein?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
