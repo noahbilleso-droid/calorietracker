@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Target, Scale, Ruler, Activity, Trash2, Sun, Moon, Monitor } from 'lucide-react';
+import { User, Target, Scale, Ruler, Activity, Trash2, Sun, Moon, Monitor, LogOut, Loader2 } from 'lucide-react';
 import { useNutritionStore } from '@/hooks/useNutritionStore';
 import { useTheme } from '@/hooks/useTheme';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,7 +21,10 @@ import {
 export const ProfileTab = () => {
   const { profile, clearHistory, dayLogs } = useNutritionStore();
   const { theme, setTheme } = useTheme();
+  const { user, signOut } = useAuth();
+  const { toast } = useToast();
   const [showCleared, setShowCleared] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const themeOptions = [
     { value: 'light' as const, icon: Sun, label: 'Light' },
@@ -44,6 +49,19 @@ export const ProfileTab = () => {
     clearHistory();
     setShowCleared(true);
     setTimeout(() => setShowCleared(false), 2000);
+  };
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    const { error } = await signOut();
+    if (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Logout failed',
+        description: error.message,
+      });
+      setIsLoggingOut(false);
+    }
   };
 
   return (
@@ -210,6 +228,39 @@ export const ProfileTab = () => {
               ✓ History cleared successfully
             </motion.p>
           )}
+        </div>
+      </motion.section>
+
+      {/* Account Section */}
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.55 }}
+        className="px-4 mt-6"
+      >
+        <h3 className="text-sm font-semibold text-foreground mb-3">Account</h3>
+        <div className="bg-card rounded-lg p-4 border border-border shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">Logged in as</p>
+              <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+                {user?.email || 'Unknown'}
+              </p>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+            >
+              {isLoggingOut ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              ) : (
+                <LogOut className="w-4 h-4 mr-1" />
+              )}
+              Log out
+            </Button>
+          </div>
         </div>
       </motion.section>
 
