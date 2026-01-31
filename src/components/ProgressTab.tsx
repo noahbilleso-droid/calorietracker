@@ -1,10 +1,13 @@
 import { motion } from 'framer-motion';
-import { TrendingUp, Flame, Target, Award, CalendarX } from 'lucide-react';
+import { TrendingUp, Flame, Target, Award, CalendarX, Droplets } from 'lucide-react';
 import { useNutritionStore } from '@/hooks/useNutritionStore';
+import { useWaterStore } from '@/hooks/useWaterStore';
 
 export const ProgressTab = () => {
   const { computeStats } = useNutritionStore();
+  const { computeWaterStats, waterLogs } = useWaterStore();
   const stats = computeStats();
+  const waterStats = computeWaterStats();
   
   const maxHeight = stats.weeklyData.length > 0 
     ? Math.max(...stats.weeklyData.map(d => d.calories), 1)
@@ -162,6 +165,74 @@ export const ProgressTab = () => {
           </div>
         </div>
       </motion.section>
+
+      {/* Water Weekly Chart */}
+      {waterLogs.length > 0 && (
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="px-4 mt-4"
+        >
+          <div className="bg-card rounded-lg p-4 border border-border shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Droplets className="w-5 h-5 text-blue-500" />
+              <h2 className="font-semibold text-foreground">Water This Week</h2>
+            </div>
+            
+            <div className="flex items-end justify-between gap-2 h-32">
+              {waterStats.weeklyData.map((day, index) => {
+                const maxIntake = Math.max(...waterStats.weeklyData.map(d => d.intake), day.goal);
+                const height = day.hasData ? (day.intake / maxIntake) * 100 : 5;
+                const metGoal = day.intake >= day.goal;
+
+                return (
+                  <div key={day.day} className="flex-1 flex flex-col items-center gap-2">
+                    <motion.div
+                      initial={{ height: 0 }}
+                      animate={{ height: `${height}%` }}
+                      transition={{ delay: 0.5 + index * 0.05, duration: 0.5 }}
+                      className={`w-full rounded-t-md ${
+                        !day.hasData 
+                          ? 'bg-muted' 
+                          : metGoal 
+                            ? 'bg-blue-500' 
+                            : 'bg-blue-300'
+                      }`}
+                    />
+                    <span className="text-xs text-muted-foreground">{day.dayLabel}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t border-border">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded bg-blue-500" />
+                <span className="text-xs text-muted-foreground">Goal met</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded bg-blue-300" />
+                <span className="text-xs text-muted-foreground">Under goal</span>
+              </div>
+            </div>
+
+            {/* Water stats summary */}
+            <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-border">
+              <div className="text-center">
+                <p className="text-lg font-bold text-foreground">{waterStats.avgIntake} ml</p>
+                <p className="text-xs text-muted-foreground">Avg. daily intake</p>
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-bold text-foreground">
+                  {waterStats.onTrackTotal > 0 ? `${waterStats.onTrackDays}/${waterStats.onTrackTotal}` : '0'}
+                </p>
+                <p className="text-xs text-muted-foreground">Days goal met</p>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+      )}
 
       {/* Motivation message */}
       <motion.section
