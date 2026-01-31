@@ -6,15 +6,17 @@ import { MacroProgress } from './MacroProgress';
 import { MealCard } from './MealCard';
 import { AddFoodDialog } from './AddFoodDialog';
 import { ScanFoodSheet } from './scan/ScanFoodSheet';
+import { WaterCard } from './WaterCard';
 import { Button } from './ui/button';
 import { useNutritionStore } from '@/hooks/useNutritionStore';
+import { useWaterStore } from '@/hooks/useWaterStore';
 import { MealType } from '@/types/nutrition';
 
 export const Dashboard = () => {
   const { profile, getEntriesByMeal, getDailyProgress, addEntry, removeEntry, checkDailyReset, loading } = useNutritionStore();
+  const { todayLog, addWater, loading: waterLoading } = useWaterStore();
   const [addFoodMeal, setAddFoodMeal] = useState<MealType | null>(null);
   const [scanSheetOpen, setScanSheetOpen] = useState(false);
-
   // Check for daily reset when Dashboard mounts
   useEffect(() => {
     checkDailyReset();
@@ -29,7 +31,7 @@ export const Dashboard = () => {
     day: 'numeric',
   });
 
-  if (loading) {
+  if (loading || waterLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -115,6 +117,20 @@ export const Dashboard = () => {
             />
           </div>
         </div>
+      </motion.section>
+
+      {/* Water Intake */}
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 }}
+        className="px-4 pb-4"
+      >
+        <WaterCard
+          currentMl={todayLog?.intakeMl || 0}
+          goalMl={todayLog?.goalMl || 2000}
+          onAddWater={addWater}
+        />
       </motion.section>
 
       {/* Meal Cards */}
