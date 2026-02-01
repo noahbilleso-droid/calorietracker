@@ -89,6 +89,39 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          activity_level: string
+          created_at: string
+          daily_calorie_goal: number
+          height_cm: number
+          id: string
+          updated_at: string
+          user_id: string
+          weight_kg: number
+        }
+        Insert: {
+          activity_level?: string
+          created_at?: string
+          daily_calorie_goal?: number
+          height_cm?: number
+          id?: string
+          updated_at?: string
+          user_id: string
+          weight_kg?: number
+        }
+        Update: {
+          activity_level?: string
+          created_at?: string
+          daily_calorie_goal?: number
+          height_cm?: number
+          id?: string
+          updated_at?: string
+          user_id?: string
+          weight_kg?: number
+        }
+        Relationships: []
+      }
       water_entries: {
         Row: {
           amount_ml: number

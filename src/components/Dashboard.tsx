@@ -10,11 +10,13 @@ import { WaterCard } from './WaterCard';
 import { Button } from './ui/button';
 import { useNutritionStore } from '@/hooks/useNutritionStore';
 import { useWaterStore } from '@/hooks/useWaterStore';
+import { useProfileStore } from '@/hooks/useProfileStore';
 import { MealType } from '@/types/nutrition';
 
 export const Dashboard = () => {
-  const { profile, getEntriesByMeal, getDailyProgress, addEntry, removeEntry, checkDailyReset, loading } = useNutritionStore();
+  const { getEntriesByMeal, getDailyProgress, addEntry, removeEntry, checkDailyReset, loading } = useNutritionStore();
   const { todayEntries, todayTotal, goalMl, addWater, removeEntry: removeWaterEntry, undoLast, loading: waterLoading } = useWaterStore();
+  const { profile, loading: profileLoading } = useProfileStore();
   const [addFoodMeal, setAddFoodMeal] = useState<MealType | null>(null);
   const [scanSheetOpen, setScanSheetOpen] = useState(false);
   // Check for daily reset when Dashboard mounts
@@ -31,7 +33,12 @@ export const Dashboard = () => {
     day: 'numeric',
   });
 
-  if (loading || waterLoading) {
+  // Calculate macro goals from calorie goal
+  const proteinGoal = Math.round((profile.dailyCalorieGoal * 0.25) / 4);
+  const carbsGoal = Math.round((profile.dailyCalorieGoal * 0.45) / 4);
+  const fatGoal = Math.round((profile.dailyCalorieGoal * 0.30) / 9);
+
+  if (loading || waterLoading || profileLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -97,21 +104,21 @@ export const Dashboard = () => {
             <MacroProgress
               label="Protein"
               current={progress.protein}
-              goal={profile.proteinGoal}
+              goal={proteinGoal}
               colorClass="bg-nutrition-protein"
               bgClass="bg-nutrition-protein-light"
             />
             <MacroProgress
               label="Carbs"
               current={progress.carbs}
-              goal={profile.carbsGoal}
+              goal={carbsGoal}
               colorClass="bg-nutrition-carbs"
               bgClass="bg-nutrition-carbs-light"
             />
             <MacroProgress
               label="Fat"
               current={progress.fat}
-              goal={profile.fatGoal}
+              goal={fatGoal}
               colorClass="bg-nutrition-fat"
               bgClass="bg-nutrition-fat-light"
             />
