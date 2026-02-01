@@ -3,10 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { getDenmarkDateString } from './useNutritionStore';
 
-export interface WaterLog {
-  date: string;
-  intakeMl: number;
-  goalMl: number;
+export interface WaterEntry {
+  id: string;
+  amountMl: number;
+  createdAt: string;
+  dayDate: string;
 }
 
 export interface WaterStats {
@@ -26,15 +27,18 @@ const DEFAULT_GOAL_ML = 2000;
 
 export const useWaterStore = () => {
   const { user } = useAuth();
-  const [todayLog, setTodayLog] = useState<WaterLog | null>(null);
-  const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
+  const [todayEntries, setTodayEntries] = useState<WaterEntry[]>([]);
+  const [allEntries, setAllEntries] = useState<WaterEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch today's water log and history
+  const todayTotal = todayEntries.reduce((sum, e) => sum + e.amountMl, 0);
+  const goalMl = DEFAULT_GOAL_ML;
+
+  // Fetch water entries
   useEffect(() => {
     if (!user) {
-      setTodayLog(null);
-      setWaterLogs([]);
+      setTodayEntries([]);
+      setAllEntries([]);
       setLoading(false);
       return;
     }
@@ -43,25 +47,24 @@ export const useWaterStore = () => {
       setLoading(true);
       const todayDenmark = getDenmarkDateString();
 
-      // Fetch all water logs
-      const { data: logsData, error: logsError } = await supabase
-        .from('water_logs')
+      const { data, error } = await supabase
+        .from('water_entries')
         .select('*')
         .eq('user_id', user.id)
-        .order('day_date', { ascending: false });
+        .order('created_at', { ascending: false });
 
-      if (logsError) {
-        console.error('Error fetching water logs:', logsError);
+      if (error) {
+        console.error('Error fetching water entries:', error);
       } else {
-        const logs: WaterLog[] = (logsData || []).map((l) => ({
-          date: l.day_date,
-          intakeMl: Number(l.intake_ml),
-          goalMl: Number(l.goal_ml),
+        const entries: WaterEntry[] = (data || []).map((e) => ({
+          id: e.id,
+          amountMl: e.amount_ml,
+          createdAt: e.created_at,
+          dayDate: e.day_date,
         }));
-        setWaterLogs(logs);
-
-        const today = logs.find((l) => l.date === todayDenmark);
-        setTodayLog(today || { date: todayDenmark, intakeMl: 0, goalMl: DEFAULT_GOAL_ML });
+        
+        setAllEntries(entries);
+        setTodayEntries(entries.filter((e) => e.dayDate === todayDenmark));
       }
 
       setLoading(false);
@@ -75,44 +78,63 @@ export const useWaterStore = () => {
       if (!user) return;
 
       const todayDenmark = getDenmarkDateString();
-      const currentIntake = todayLog?.intakeMl || 0;
-      const newIntake = currentIntake + amountMl;
-      const goalMl = todayLog?.goalMl || DEFAULT_GOAL_ML;
 
-      const { error } = await supabase
-        .from('water_logs')
-        .upsert(
-          {
-            user_id: user.id,
-            day_date: todayDenmark,
-            intake_ml: newIntake,
-            goal_ml: goalMl,
-          },
-          { onConflict: 'user_id,day_date' }
-        );
+      const { data, error } = await supabase
+        .from('water_entries')
+        .insert({
+          user_id: user.id,
+          day_date: todayDenmark,
+          amount_ml: amountMl,
+        })
+        .select()
+        .single();
 
       if (error) {
         console.error('Error adding water:', error);
         return;
       }
 
-      const newLog: WaterLog = {
-        date: todayDenmark,
-        intakeMl: newIntake,
-        goalMl,
+      const newEntry: WaterEntry = {
+        id: data.id,
+        amountMl: data.amount_ml,
+        createdAt: data.created_at,
+        dayDate: data.day_date,
       };
 
-      setTodayLog(newLog);
-      setWaterLogs((prev) => {
-        const existing = prev.find((l) => l.date === todayDenmark);
-        if (existing) {
-          return prev.map((l) => (l.date === todayDenmark ? newLog : l));
-        }
-        return [newLog, ...prev];
-      });
+      setTodayEntries((prev) => [newEntry, ...prev]);
+      setAllEntries((prev) => [newEntry, ...prev]);
     },
-    [user, todayLog]
+    [user]
   );
+
+  const removeEntry = useCallback(
+    async (entryId: string) => {
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('water_entries')
+        .delete()
+        .eq('id', entryId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error removing water entry:', error);
+        return;
+      }
+
+      setTodayEntries((prev) => prev.filter((e) => e.id !== entryId));
+      setAllEntries((prev) => prev.filter((e) => e.id !== entryId));
+    },
+    [user]
+  );
+
+  const undoLast = useCallback(async () => {
+    if (!user || todayEntries.length === 0) return;
+
+    // Today entries are sorted by created_at desc, so first is newest
+    const newestEntry = todayEntries[0];
+    await removeEntry(newestEntry.id);
+  }, [user, todayEntries, removeEntry]);
 
   const computeWaterStats = useCallback((): WaterStats => {
     // Get last 7 days
@@ -123,29 +145,38 @@ export const useWaterStore = () => {
       last7Days.push(getDenmarkDateString(d));
     }
 
-    // Filter logs for last 7 days
-    const last7DaysLogs = waterLogs.filter(
-      (log) => last7Days.includes(log.date) && log.intakeMl > 0
+    // Aggregate entries by day
+    const dailyTotals = new Map<string, number>();
+    for (const entry of allEntries) {
+      if (last7Days.includes(entry.dayDate)) {
+        const current = dailyTotals.get(entry.dayDate) || 0;
+        dailyTotals.set(entry.dayDate, current + entry.amountMl);
+      }
+    }
+
+    // Days with data
+    const daysWithData = Array.from(dailyTotals.entries()).filter(
+      ([, total]) => total > 0
     );
 
     // Average intake
     const avgIntake =
-      last7DaysLogs.length > 0
+      daysWithData.length > 0
         ? Math.round(
-            last7DaysLogs.reduce((sum, log) => sum + log.intakeMl, 0) /
-              last7DaysLogs.length
+            daysWithData.reduce((sum, [, total]) => sum + total, 0) /
+              daysWithData.length
           )
         : 0;
 
     // On track days (met goal)
-    const onTrackDays = last7DaysLogs.filter(
-      (log) => log.intakeMl >= log.goalMl
+    const onTrackDays = daysWithData.filter(
+      ([, total]) => total >= DEFAULT_GOAL_ML
     ).length;
-    const onTrackTotal = last7DaysLogs.length;
+    const onTrackTotal = daysWithData.length;
 
     // Weekly chart data
     const weeklyData = last7Days.reverse().map((dateStr) => {
-      const log = waterLogs.find((l) => l.date === dateStr);
+      const intake = dailyTotals.get(dateStr) || 0;
       const date = new Date(dateStr + 'T12:00:00');
       const dayLabel = new Intl.DateTimeFormat('en-US', {
         weekday: 'short',
@@ -155,9 +186,9 @@ export const useWaterStore = () => {
       return {
         day: dateStr,
         dayLabel,
-        intake: log?.intakeMl || 0,
-        goal: log?.goalMl || DEFAULT_GOAL_ML,
-        hasData: log ? log.intakeMl > 0 : false,
+        intake,
+        goal: DEFAULT_GOAL_ML,
+        hasData: intake > 0,
       };
     });
 
@@ -167,13 +198,17 @@ export const useWaterStore = () => {
       onTrackDays,
       onTrackTotal,
     };
-  }, [waterLogs]);
+  }, [allEntries]);
 
   return {
-    todayLog,
-    waterLogs,
+    todayEntries,
+    allEntries,
+    todayTotal,
+    goalMl,
     loading,
     addWater,
+    removeEntry,
+    undoLast,
     computeWaterStats,
   };
 };

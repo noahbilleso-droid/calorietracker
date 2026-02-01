@@ -5,7 +5,7 @@ import { useWaterStore } from '@/hooks/useWaterStore';
 
 export const ProgressTab = () => {
   const { computeStats } = useNutritionStore();
-  const { computeWaterStats, waterLogs } = useWaterStore();
+  const { computeWaterStats, todayEntries, allEntries } = useWaterStore();
   const stats = computeStats();
   const waterStats = computeWaterStats();
   
@@ -167,7 +167,7 @@ export const ProgressTab = () => {
       </motion.section>
 
       {/* Water Weekly Chart */}
-      {waterLogs.length > 0 && (
+      {allEntries.length > 0 && (
         <motion.section
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

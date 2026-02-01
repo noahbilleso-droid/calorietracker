@@ -14,7 +14,7 @@ import { MealType } from '@/types/nutrition';
 
 export const Dashboard = () => {
   const { profile, getEntriesByMeal, getDailyProgress, addEntry, removeEntry, checkDailyReset, loading } = useNutritionStore();
-  const { todayLog, addWater, loading: waterLoading } = useWaterStore();
+  const { todayEntries, todayTotal, goalMl, addWater, removeEntry: removeWaterEntry, undoLast, loading: waterLoading } = useWaterStore();
   const [addFoodMeal, setAddFoodMeal] = useState<MealType | null>(null);
   const [scanSheetOpen, setScanSheetOpen] = useState(false);
   // Check for daily reset when Dashboard mounts
@@ -127,9 +127,12 @@ export const Dashboard = () => {
         className="px-4 pb-4"
       >
         <WaterCard
-          currentMl={todayLog?.intakeMl || 0}
-          goalMl={todayLog?.goalMl || 2000}
+          currentMl={todayTotal}
+          goalMl={goalMl}
+          entries={todayEntries}
           onAddWater={addWater}
+          onRemoveEntry={removeWaterEntry}
+          onUndoLast={undoLast}
         />
       </motion.section>
 
