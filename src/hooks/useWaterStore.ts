@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { getDenmarkDateString } from './useNutritionStore';
@@ -31,7 +31,10 @@ export const useWaterStore = () => {
   const [allEntries, setAllEntries] = useState<WaterEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const todayTotal = todayEntries.reduce((sum, e) => sum + e.amountMl, 0);
+  const todayTotal = useMemo(
+    () => (Array.isArray(todayEntries) ? todayEntries.reduce((sum, e) => sum + e.amountMl, 0) : 0),
+    [todayEntries]
+  );
   const goalMl = DEFAULT_GOAL_ML;
 
   // Fetch water entries
