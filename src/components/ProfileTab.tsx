@@ -1,18 +1,24 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { User, Target, Scale, Ruler, Activity, Sun, Moon, Monitor, LogOut, Loader2 } from 'lucide-react';
+import { useProfileStore, ActivityLevel } from '@/hooks/useProfileStore';
 import { useNutritionStore } from '@/hooks/useNutritionStore';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { ProfileStatEditor } from './ProfileStatEditor';
+
+type StatType = 'dailyCalorieGoal' | 'weightKg' | 'heightCm' | 'activityLevel';
 
 export const ProfileTab = () => {
-  const { profile, dayLogs } = useNutritionStore();
+  const { profile, updateProfile, loading: profileLoading } = useProfileStore();
+  const { dayLogs } = useNutritionStore();
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [editingStat, setEditingStat] = useState<StatType | null>(null);
 
   const themeOptions = [
     { value: 'light' as const, icon: Sun, label: 'Light' },
@@ -20,17 +26,47 @@ export const ProfileTab = () => {
     { value: 'system' as const, icon: Monitor, label: 'System' },
   ];
 
-  const stats = [
-    { icon: Target, label: 'Daily Goal', value: `${profile.dailyCalorieGoal.toLocaleString()} cal` },
-    { icon: Scale, label: 'Current Weight', value: '75 kg' },
-    { icon: Ruler, label: 'Height', value: '175 cm' },
-    { icon: Activity, label: 'Activity Level', value: 'Moderate' },
+  const stats: Array<{
+    icon: typeof Target;
+    label: string;
+    value: string;
+    key: StatType;
+  }> = [
+    {
+      icon: Target,
+      label: 'Daily Goal',
+      value: `${profile.dailyCalorieGoal.toLocaleString()} cal`,
+      key: 'dailyCalorieGoal',
+    },
+    {
+      icon: Scale,
+      label: 'Current Weight',
+      value: `${profile.weightKg} kg`,
+      key: 'weightKg',
+    },
+    {
+      icon: Ruler,
+      label: 'Height',
+      value: `${profile.heightCm} cm`,
+      key: 'heightCm',
+    },
+    {
+      icon: Activity,
+      label: 'Activity Level',
+      value: profile.activityLevel,
+      key: 'activityLevel',
+    },
   ];
 
+  // Macro goals based on calorie goal (rough estimation)
+  const proteinGoal = Math.round((profile.dailyCalorieGoal * 0.25) / 4); // 25% of calories, 4 cal/g
+  const carbsGoal = Math.round((profile.dailyCalorieGoal * 0.45) / 4); // 45% of calories, 4 cal/g
+  const fatGoal = Math.round((profile.dailyCalorieGoal * 0.30) / 9); // 30% of calories, 9 cal/g
+
   const macroGoals = [
-    { label: 'Protein', value: profile.proteinGoal, unit: 'g', color: 'bg-nutrition-protein' },
-    { label: 'Carbs', value: profile.carbsGoal, unit: 'g', color: 'bg-nutrition-carbs' },
-    { label: 'Fat', value: profile.fatGoal, unit: 'g', color: 'bg-nutrition-fat' },
+    { label: 'Protein', value: proteinGoal, unit: 'g', color: 'bg-nutrition-protein' },
+    { label: 'Carbs', value: carbsGoal, unit: 'g', color: 'bg-nutrition-carbs' },
+    { label: 'Fat', value: fatGoal, unit: 'g', color: 'bg-nutrition-fat' },
   ];
 
   const handleLogout = async () => {
@@ -45,6 +81,49 @@ export const ProfileTab = () => {
       setIsLoggingOut(false);
     }
   };
+
+  const handleSaveStat = async (value: number | string) => {
+    if (!editingStat) return;
+
+    const updates: Partial<Record<StatType, number | string>> = {
+      [editingStat]: value,
+    };
+
+    const { error } = await updateProfile(updates as any);
+    if (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Update failed',
+        description: 'Could not save your changes. Please try again.',
+      });
+    } else {
+      toast({
+        title: 'Saved',
+        description: 'Your profile has been updated.',
+      });
+    }
+  };
+
+  const getCurrentValue = (key: StatType): number | string => {
+    switch (key) {
+      case 'dailyCalorieGoal':
+        return profile.dailyCalorieGoal;
+      case 'weightKg':
+        return profile.weightKg;
+      case 'heightCm':
+        return profile.heightCm;
+      case 'activityLevel':
+        return profile.activityLevel;
+    }
+  };
+
+  if (profileLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -70,9 +149,11 @@ export const ProfileTab = () => {
             <User className="w-8 h-8 text-primary" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-foreground">{profile.name}</h2>
+            <h2 className="text-xl font-bold text-foreground">
+              {user?.email?.split('@')[0] || 'User'}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              {dayLogs.length > 0 
+              {dayLogs.length > 0
                 ? `${dayLogs.length} day${dayLogs.length === 1 ? '' : 's'} logged`
                 : 'No days logged yet'}
             </p>
@@ -80,22 +161,23 @@ export const ProfileTab = () => {
         </div>
       </motion.div>
 
-      {/* Stats Grid */}
+      {/* Stats Grid - Clickable */}
       <section className="px-4 mt-6">
         <h3 className="text-sm font-semibold text-foreground mb-3">Your Stats</h3>
         <div className="grid grid-cols-2 gap-3">
           {stats.map((stat, index) => (
-            <motion.div
+            <motion.button
               key={stat.label}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 + index * 0.05 }}
-              className="bg-card rounded-lg p-4 border border-border shadow-sm"
+              className="bg-card rounded-lg p-4 border border-border shadow-sm text-left hover:border-primary/50 hover:bg-accent/50 transition-colors active:scale-[0.98]"
+              onClick={() => setEditingStat(stat.key)}
             >
               <stat.icon className="w-5 h-5 text-primary mb-2" />
               <p className="text-lg font-bold text-foreground">{stat.value}</p>
               <p className="text-xs text-muted-foreground">{stat.label}</p>
-            </motion.div>
+            </motion.button>
           ))}
         </div>
       </section>
@@ -170,8 +252,8 @@ export const ProfileTab = () => {
                 {user?.email || 'Unknown'}
               </p>
             </div>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={handleLogout}
               disabled={isLoggingOut}
@@ -200,6 +282,17 @@ export const ProfileTab = () => {
           </p>
         </div>
       </motion.section>
+
+      {/* Stat Editor Sheet */}
+      {editingStat && (
+        <ProfileStatEditor
+          open={!!editingStat}
+          onOpenChange={(open) => !open && setEditingStat(null)}
+          statType={editingStat}
+          currentValue={getCurrentValue(editingStat)}
+          onSave={handleSaveStat}
+        />
+      )}
     </div>
   );
 };
