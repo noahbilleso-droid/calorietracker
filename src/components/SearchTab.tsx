@@ -1,18 +1,13 @@
-import { useState, forwardRef } from 'react';
-import { Search, Loader2, AlertCircle, Plus } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Search, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { useUSDASearch, USDANutrients } from '@/hooks/useUSDASearch';
 import { useNutritionStore } from '@/hooks/useNutritionStore';
 import { FoodConfirmationDialog } from './FoodConfirmationDialog';
+import { FoodResultCard } from './FoodResultCard';
 import { useToast } from '@/hooks/use-toast';
-
-// ForwardRef wrapper for motion.div to fix AnimatePresence ref warning
-const MotionCard = forwardRef<HTMLDivElement, React.ComponentProps<typeof motion.div>>(
-  (props, ref) => <motion.div ref={ref} {...props} />
-);
-MotionCard.displayName = 'MotionCard';
+import { groupFoodResults } from '@/lib/foodNameUtils';
 
 interface SelectedFood {
   name: string;
@@ -26,6 +21,12 @@ export const SearchTab = () => {
   const { toast } = useToast();
   const [selectedFood, setSelectedFood] = useState<SelectedFood | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+
+  // Group and sort results for human-friendly display
+  const groupedResults = useMemo(() => {
+    if (!results || results.length === 0) return [];
+    return groupFoodResults(results, query);
+  }, [results, query]);
 
   const handleAddFood = (food: { name: string; category?: string; nutrients: USDANutrients }) => {
     setSelectedFood(food);
@@ -47,11 +48,6 @@ export const SearchTab = () => {
       description: `${food.name} added to ${food.mealType}`,
     });
     setSelectedFood(null);
-  };
-
-  const formatNutrient = (value: number) => {
-    if (value < 0) return '—';
-    return value.toString();
   };
 
   return (
@@ -133,7 +129,7 @@ export const SearchTab = () => {
         )}
 
         {/* No results */}
-        {isConfigured && !isLoading && !error && query.length >= 2 && results.length === 0 && (
+        {isConfigured && !isLoading && !error && query.length >= 2 && groupedResults.length === 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -147,59 +143,17 @@ export const SearchTab = () => {
           </motion.div>
         )}
 
-        {/* Results */}
-        {isConfigured && !isLoading && results.length > 0 && (
+        {/* Grouped Results */}
+        {isConfigured && !isLoading && groupedResults.length > 0 && (
           <div className="space-y-2">
             <AnimatePresence mode="popLayout">
-              {results.map((food, index) => (
-                <MotionCard
-                  key={food.fdcId}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ delay: index * 0.03 }}
-                  className="bg-card rounded-lg p-4 border border-border shadow-sm"
-                >
-                  <div className="flex justify-between items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-foreground line-clamp-2">{food.description}</h3>
-                      {food.foodCategory && (
-                        <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full inline-block mt-1">
-                          {food.foodCategory}
-                        </span>
-                      )}
-                      <div className="flex gap-4 text-xs text-muted-foreground mt-2">
-                        <span className="text-nutrition-protein">P: {formatNutrient(food.nutrients.protein)}g</span>
-                        <span className="text-nutrition-carbs">C: {formatNutrient(food.nutrients.carbs)}g</span>
-                        <span className="text-nutrition-fat">F: {formatNutrient(food.nutrients.fat)}g</span>
-                        <span className="text-muted-foreground/60">per 100g</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <span className="text-lg font-bold text-primary">
-                        {formatNutrient(food.nutrients.calories)}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleAddFood({
-                          name: food.description,
-                          category: food.foodCategory,
-                          nutrients: {
-                            calories: Math.max(0, food.nutrients.calories),
-                            protein: Math.max(0, food.nutrients.protein),
-                            carbs: Math.max(0, food.nutrients.carbs),
-                            fat: Math.max(0, food.nutrients.fat),
-                          },
-                        })}
-                        className="h-8 px-3"
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Add
-                      </Button>
-                    </div>
-                  </div>
-                </MotionCard>
+              {groupedResults.map((group, index) => (
+                <FoodResultCard
+                  key={group.key + '-' + group.mainItem.fdcId}
+                  group={group}
+                  onAddFood={handleAddFood}
+                  index={index}
+                />
               ))}
             </AnimatePresence>
           </div>
