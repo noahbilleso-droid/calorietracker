@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, Loader2, AlertCircle } from 'lucide-react';
+import { Search, Loader2, AlertCircle, Lightbulb } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { useUSDASearch, USDANutrients } from '@/hooks/useUSDASearch';
@@ -16,7 +16,16 @@ interface SelectedFood {
 }
 
 export const SearchTab = () => {
-  const { query, setQuery, results, isLoading, error, isConfigured } = useUSDASearch();
+  const { 
+    query, 
+    setQuery, 
+    results, 
+    isLoading, 
+    error, 
+    isConfigured,
+    didYouMean,
+    applyDidYouMean 
+  } = useUSDASearch();
   const { addEntry } = useNutritionStore();
   const { toast } = useToast();
   const [selectedFood, setSelectedFood] = useState<SelectedFood | null>(null);
@@ -50,6 +59,10 @@ export const SearchTab = () => {
     setSelectedFood(null);
   };
 
+  const handleDidYouMeanClick = () => {
+    applyDidYouMean();
+  };
+
   return (
     <div className="min-h-screen bg-background pb-24">
       <header className="px-4 pt-8 pb-4">
@@ -77,6 +90,21 @@ export const SearchTab = () => {
             className="pl-11 h-12 text-base"
           />
         </motion.div>
+
+        {/* Did you mean suggestion */}
+        {didYouMean && !isLoading && (
+          <motion.button
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            onClick={handleDidYouMeanClick}
+            className="flex items-center gap-2 w-full px-3 py-2 bg-primary/10 hover:bg-primary/15 rounded-lg text-sm text-primary transition-colors"
+          >
+            <Lightbulb className="w-4 h-4" />
+            <span>
+              Did you mean: <strong className="font-semibold">{didYouMean}</strong>?
+            </span>
+          </motion.button>
+        )}
 
         {/* API not configured */}
         {!isConfigured && (
@@ -136,9 +164,9 @@ export const SearchTab = () => {
             className="flex flex-col items-center justify-center py-12 text-center"
           >
             <Search className="w-10 h-10 text-muted-foreground mb-3" />
-            <p className="text-foreground font-medium">No foods found</p>
+            <p className="text-foreground font-medium">No matches found</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Try a different search term
+              Try fewer words or check spelling
             </p>
           </motion.div>
         )}
