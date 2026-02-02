@@ -1,4 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { 
+  rerankResults, 
+  getDidYouMean, 
+  hasWeakResults, 
+  extractMainTokens,
+  ScoredResult 
+} from '@/lib/fuzzySearch';
 
 const USDA_API_BASE = 'https://api.nal.usda.gov/fdc/v1';
 
@@ -54,7 +61,6 @@ const NUTRIENT_IDS = {
 };
 
 function extractNutrientsFromSearch(foodNutrients: USDASearchResponse['foods'][0]['foodNutrients']): USDANutrients {
-  // Return -1 to indicate missing data (will be shown as "—" in UI)
   const nutrients: USDANutrients = { calories: -1, protein: -1, carbs: -1, fat: -1 };
   
   if (!foodNutrients || foodNutrients.length === 0) return nutrients;
@@ -76,7 +82,6 @@ function extractNutrientsFromSearch(foodNutrients: USDASearchResponse['foods'][0
     }
   }
   
-  // Convert -1 to 0 only if we found some nutrients
   const hasAnyData = nutrients.calories >= 0 || nutrients.protein >= 0 || nutrients.carbs >= 0 || nutrients.fat >= 0;
   if (hasAnyData) {
     if (nutrients.calories < 0) nutrients.calories = 0;
@@ -113,12 +118,42 @@ function extractNutrientsFromDetails(foodNutrients: USDAFoodDetailsResponse['foo
   return nutrients;
 }
 
+type FoodWithNutrients = USDAFood & { nutrients: USDANutrients };
+
+async function fetchUSDASearch(
+  query: string,
+  apiKey: string,
+  signal?: AbortSignal
+): Promise<FoodWithNutrients[]> {
+  const url = new URL(`${USDA_API_BASE}/foods/search`);
+  url.searchParams.set('api_key', apiKey);
+  url.searchParams.set('query', query);
+  url.searchParams.set('dataType', 'Foundation,SR Legacy');
+  url.searchParams.set('pageSize', '25');
+
+  const response = await fetch(url.toString(), { signal });
+  
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status}`);
+  }
+
+  const data: USDASearchResponse = await response.json();
+  
+  return data.foods.map(food => ({
+    fdcId: food.fdcId,
+    description: food.description,
+    foodCategory: food.foodCategory,
+    nutrients: extractNutrientsFromSearch(food.foodNutrients),
+  }));
+}
+
 export function useUSDASearch() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Array<USDAFood & { nutrients: USDANutrients }>>([]);
+  const [results, setResults] = useState<FoodWithNutrients[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConfigured, setIsConfigured] = useState(true);
+  const [didYouMean, setDidYouMean] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const apiKey = import.meta.env.VITE_USDA_API_KEY;
@@ -138,6 +173,7 @@ export function useUSDASearch() {
 
     if (searchQuery.length < 2) {
       setResults([]);
+      setDidYouMean(null);
       return;
     }
 
@@ -149,35 +185,54 @@ export function useUSDASearch() {
 
     setIsLoading(true);
     setError(null);
+    setDidYouMean(null);
 
     try {
-      const url = new URL(`${USDA_API_BASE}/foods/search`);
-      url.searchParams.set('api_key', apiKey);
-      url.searchParams.set('query', searchQuery);
-      url.searchParams.set('dataType', 'Foundation,SR Legacy');
-      url.searchParams.set('pageSize', '25');
+      // Fetch primary search results
+      let foods = await fetchUSDASearch(
+        searchQuery,
+        apiKey,
+        abortControllerRef.current.signal
+      );
 
-      const response = await fetch(url.toString(), {
-        signal: abortControllerRef.current.signal,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+      // Check if results are weak - try expanded search
+      if (hasWeakResults(searchQuery, foods)) {
+        const mainTokens = extractMainTokens(searchQuery);
+        
+        if (mainTokens && mainTokens !== searchQuery.toLowerCase().trim()) {
+          try {
+            const expandedFoods = await fetchUSDASearch(
+              mainTokens,
+              apiKey,
+              abortControllerRef.current.signal
+            );
+            
+            // Merge results, avoiding duplicates
+            const existingIds = new Set(foods.map(f => f.fdcId));
+            const newFoods = expandedFoods.filter(f => !existingIds.has(f.fdcId));
+            foods = [...foods, ...newFoods];
+          } catch {
+            // Expanded search failed, use original results
+          }
+        }
       }
 
-      const data: USDASearchResponse = await response.json();
+      // Re-rank results using fuzzy matching
+      const ranked = rerankResults(searchQuery, foods);
       
-      const foods = data.foods.map(food => ({
-        fdcId: food.fdcId,
-        description: food.description,
-        foodCategory: food.foodCategory,
-        nutrients: extractNutrientsFromSearch(food.foodNutrients),
-      }));
+      // Filter out very low scoring results
+      const filteredRanked = ranked.filter(r => r.score >= 0.3);
+      
+      // Extract just the items, sorted by score
+      const sortedFoods = filteredRanked.map(r => r.item);
 
-      setResults(foods);
+      // Check for "Did you mean" suggestion
+      const suggestion = getDidYouMean(searchQuery, sortedFoods);
+      setDidYouMean(suggestion);
+
+      setResults(sortedFoods);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        // Request was cancelled, ignore
         return;
       }
       console.error('Food search error:', err);
@@ -188,7 +243,7 @@ export function useUSDASearch() {
     }
   }, [apiKey]);
 
-  // Debounced search with 500ms delay
+  // Debounced search with 400ms delay
   useEffect(() => {
     if (!isConfigured) return;
     
@@ -198,8 +253,9 @@ export function useUSDASearch() {
       } else {
         setResults([]);
         setError(null);
+        setDidYouMean(null);
       }
-    }, 500);
+    }, 400);
 
     return () => clearTimeout(timer);
   }, [query, searchFoods, isConfigured]);
@@ -225,6 +281,12 @@ export function useUSDASearch() {
     }
   }, [apiKey]);
 
+  const applyDidYouMean = useCallback(() => {
+    if (didYouMean) {
+      setQuery(didYouMean);
+    }
+  }, [didYouMean]);
+
   return {
     query,
     setQuery,
@@ -233,5 +295,7 @@ export function useUSDASearch() {
     error,
     isConfigured,
     fetchFoodDetails,
+    didYouMean,
+    applyDidYouMean,
   };
 }
