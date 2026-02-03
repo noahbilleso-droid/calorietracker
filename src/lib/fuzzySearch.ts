@@ -2,6 +2,8 @@
  * Fuzzy search utilities for typo-tolerant food search
  */
 
+import { COMMON_FOODS } from './commonFoods';
+
 // Common filler/stopwords to remove
 const STOPWORDS = new Set([
   'raw', 'fresh', 'with', 'without', 'skin', 'cooked', 'prepared',
@@ -9,7 +11,7 @@ const STOPWORDS = new Set([
   'grilled', 'steamed', 'the', 'a', 'an', 'and', 'or', 'of', 'in',
   'from', 'to', 'for', 'on', 'at', 'by', 'as', 'is', 'it', 'all',
   'only', 'meat', 'flesh', 'mature', 'immature', 'seeds', 'commercial',
-  'varieties', 'usda', 'nfs', 'foundation', 'sr', 'legacy'
+  'varieties', 'usda', 'nfs', 'foundation', 'sr', 'legacy', 'no'
 ]);
 
 /**
@@ -254,14 +256,139 @@ export function getDidYouMean<T extends { description: string }>(
  */
 export function hasWeakResults<T extends { description: string }>(
   query: string,
-  results: T[]
+  results: T[],
+  threshold: number = 5
 ): boolean {
   if (results.length === 0) return true;
-  if (results.length <= 2) return true;
+  if (results.length < threshold) return true;
 
   // Check if top results have low similarity
   const topScores = results.slice(0, 3).map(r => similarityScore(query, r.description));
   const avgTopScore = topScores.reduce((a, b) => a + b, 0) / topScores.length;
 
-  return avgTopScore < 0.5;
+  return avgTopScore < 0.55;
+}
+
+/**
+ * Correct a misspelled token using the common foods dictionary
+ * Returns the corrected term or original if no good match found
+ */
+export function correctTypo(token: string): { corrected: string; wasChanged: boolean } {
+  const lowerToken = token.toLowerCase();
+  
+  // If it's already a known word, no correction needed
+  if (COMMON_FOODS.some(f => f.toLowerCase() === lowerToken)) {
+    return { corrected: token, wasChanged: false };
+  }
+  
+  let bestMatch = '';
+  let bestScore = 0;
+  
+  for (const food of COMMON_FOODS) {
+    const lowerFood = food.toLowerCase();
+    // Skip multi-word foods for single token matching
+    if (lowerFood.includes(' ')) continue;
+    
+    const score = jaroWinklerSimilarity(lowerToken, lowerFood);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = lowerFood;
+    }
+  }
+  
+  // Only correct if similarity >= 0.78
+  if (bestScore >= 0.78) {
+    return { corrected: bestMatch, wasChanged: bestMatch !== lowerToken };
+  }
+  
+  return { corrected: token, wasChanged: false };
+}
+
+/**
+ * Build a corrected query from a potentially misspelled input
+ * Returns the corrected query and whether any corrections were made
+ */
+export function buildCorrectedQuery(rawQuery: string): { 
+  correctedQuery: string; 
+  wasChanged: boolean;
+  originalTokens: string[];
+  correctedTokens: string[];
+} {
+  // Normalize: lowercase, remove punctuation, collapse spaces
+  const normalized = rawQuery
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // Split into tokens and remove stopwords
+  const tokens = normalized.split(' ')
+    .filter(t => t.length > 0 && !STOPWORDS.has(t));
+  
+  // Keep up to first 2 significant tokens
+  const significantTokens = tokens.slice(0, 2);
+  
+  if (significantTokens.length === 0) {
+    return { 
+      correctedQuery: rawQuery, 
+      wasChanged: false,
+      originalTokens: [],
+      correctedTokens: []
+    };
+  }
+  
+  // Try to correct each token
+  const correctedTokens: string[] = [];
+  let anyChanged = false;
+  
+  for (const token of significantTokens) {
+    const { corrected, wasChanged } = correctTypo(token);
+    correctedTokens.push(corrected);
+    if (wasChanged) {
+      anyChanged = true;
+    }
+  }
+  
+  // Also try matching against multi-word foods for the full query
+  const joinedQuery = significantTokens.join(' ');
+  const multiWordFoods = COMMON_FOODS.filter(f => f.includes(' '));
+  
+  for (const food of multiWordFoods) {
+    const score = jaroWinklerSimilarity(joinedQuery, food.toLowerCase());
+    if (score >= 0.85) {
+      return {
+        correctedQuery: food,
+        wasChanged: true,
+        originalTokens: significantTokens,
+        correctedTokens: food.split(' ')
+      };
+    }
+  }
+  
+  return {
+    correctedQuery: correctedTokens.join(' '),
+    wasChanged: anyChanged,
+    originalTokens: significantTokens,
+    correctedTokens
+  };
+}
+
+/**
+ * Check if PASS 2 typo recovery should be triggered
+ */
+export function shouldTriggerTypoRecovery<T extends { description: string }>(
+  results: T[],
+  query: string
+): boolean {
+  // Trigger if no results
+  if (results.length === 0) return true;
+  
+  // Trigger if < 5 results
+  if (results.length < 5) return true;
+  
+  // Trigger if best match has low relevance
+  const topScores = results.slice(0, 3).map(r => similarityScore(query, r.description));
+  const bestScore = Math.max(...topScores);
+  
+  return bestScore < 0.55;
 }

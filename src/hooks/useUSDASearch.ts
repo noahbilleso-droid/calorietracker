@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   rerankResults, 
   getDidYouMean, 
-  hasWeakResults, 
-  extractMainTokens,
+  shouldTriggerTypoRecovery,
+  buildCorrectedQuery,
   ScoredResult 
 } from '@/lib/fuzzySearch';
 
@@ -188,37 +188,46 @@ export function useUSDASearch() {
     setDidYouMean(null);
 
     try {
-      // Fetch primary search results
+      // PASS 1: Fetch with raw query
       let foods = await fetchUSDASearch(
         searchQuery,
         apiKey,
         abortControllerRef.current.signal
       );
 
-      // Check if results are weak - try expanded search
-      if (hasWeakResults(searchQuery, foods)) {
-        const mainTokens = extractMainTokens(searchQuery);
+      let correctionApplied: string | null = null;
+
+      // PASS 2: Typo recovery if needed
+      if (shouldTriggerTypoRecovery(foods, searchQuery)) {
+        const { correctedQuery, wasChanged } = buildCorrectedQuery(searchQuery);
         
-        if (mainTokens && mainTokens !== searchQuery.toLowerCase().trim()) {
+        if (wasChanged && correctedQuery !== searchQuery.toLowerCase().trim()) {
           try {
-            const expandedFoods = await fetchUSDASearch(
-              mainTokens,
+            const correctedFoods = await fetchUSDASearch(
+              correctedQuery,
               apiKey,
               abortControllerRef.current.signal
             );
             
             // Merge results, avoiding duplicates
             const existingIds = new Set(foods.map(f => f.fdcId));
-            const newFoods = expandedFoods.filter(f => !existingIds.has(f.fdcId));
+            const newFoods = correctedFoods.filter(f => !existingIds.has(f.fdcId));
             foods = [...foods, ...newFoods];
+            
+            // If corrected search found results, track it for "Did you mean"
+            if (correctedFoods.length > 0) {
+              correctionApplied = correctedQuery;
+            }
           } catch {
-            // Expanded search failed, use original results
+            // Corrected search failed, continue with original results
           }
         }
       }
 
       // Re-rank results using fuzzy matching
-      const ranked = rerankResults(searchQuery, foods);
+      // Use corrected query for ranking if available, otherwise use original
+      const rankingQuery = correctionApplied || searchQuery;
+      const ranked = rerankResults(rankingQuery, foods);
       
       // Filter out very low scoring results
       const filteredRanked = ranked.filter(r => r.score >= 0.3);
@@ -226,9 +235,14 @@ export function useUSDASearch() {
       // Extract just the items, sorted by score
       const sortedFoods = filteredRanked.map(r => r.item);
 
-      // Check for "Did you mean" suggestion
-      const suggestion = getDidYouMean(searchQuery, sortedFoods);
-      setDidYouMean(suggestion);
+      // Set "Did you mean" if a correction was applied and found results
+      if (correctionApplied && sortedFoods.length > 0) {
+        setDidYouMean(correctionApplied);
+      } else {
+        // Fall back to the original "Did you mean" logic
+        const suggestion = getDidYouMean(searchQuery, sortedFoods);
+        setDidYouMean(suggestion);
+      }
 
       setResults(sortedFoods);
     } catch (err) {
