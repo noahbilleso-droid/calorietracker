@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Search, Loader2, AlertCircle, Lightbulb } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
@@ -6,6 +6,7 @@ import { useUSDASearch, USDANutrients } from '@/hooks/useUSDASearch';
 import { useNutritionStore } from '@/hooks/useNutritionStore';
 import { FoodConfirmationDialog } from './FoodConfirmationDialog';
 import { FoodResultCard } from './FoodResultCard';
+import { AutocompleteDropdown } from './AutocompleteDropdown';
 import { useToast } from '@/hooks/use-toast';
 import { groupFoodResults } from '@/lib/foodNameUtils';
 
@@ -30,6 +31,8 @@ export const SearchTab = () => {
   const { toast } = useToast();
   const [selectedFood, setSelectedFood] = useState<SelectedFood | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [autocompleteOpen, setAutocompleteOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Group and sort results for human-friendly display
   const groupedResults = useMemo(() => {
@@ -63,6 +66,12 @@ export const SearchTab = () => {
     applyDidYouMean();
   };
 
+  const handleAutocompleteSelect = (text: string) => {
+    setQuery(text);
+    setAutocompleteOpen(false);
+    inputRef.current?.blur();
+  };
+
   return (
     <div className="min-h-screen bg-background pb-24">
       <header className="px-4 pt-8 pb-4">
@@ -82,12 +91,21 @@ export const SearchTab = () => {
           transition={{ delay: 0.1 }}
           className="relative"
         >
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground z-10" />
           <Input
+            ref={inputRef}
             placeholder="Search foods..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => query.length >= 2 && setAutocompleteOpen(true)}
             className="pl-11 h-12 text-base"
+          />
+          <AutocompleteDropdown
+            query={query}
+            onSelect={handleAutocompleteSelect}
+            isOpen={autocompleteOpen}
+            onOpenChange={setAutocompleteOpen}
+            inputRef={inputRef}
           />
         </motion.div>
 
@@ -181,6 +199,7 @@ export const SearchTab = () => {
                   group={group}
                   onAddFood={handleAddFood}
                   index={index}
+                  query={query}
                 />
               ))}
             </AnimatePresence>

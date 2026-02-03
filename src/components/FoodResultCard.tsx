@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { USDANutrients } from '@/hooks/useUSDASearch';
-import { cleanDisplayName, GroupedFoodResult } from '@/lib/foodNameUtils';
+import { getDisplayParts, GroupedFoodResult } from '@/lib/foodNameUtils';
 
 // ForwardRef wrapper for motion.div
 const MotionDiv = forwardRef<HTMLDivElement, React.ComponentProps<typeof motion.div>>(
@@ -27,6 +27,7 @@ interface FoodResultCardProps {
     nutrients: USDANutrients;
   }) => void;
   index: number;
+  query?: string;
 }
 
 const formatNutrient = (value: number) => {
@@ -36,12 +37,14 @@ const formatNutrient = (value: number) => {
 
 function FoodItemRow({
   item,
-  displayName,
+  displayTitle,
+  displaySubtext,
   onAdd,
   isVariant = false,
 }: {
   item: FoodItem;
-  displayName: string;
+  displayTitle: string;
+  displaySubtext?: string | null;
   onAdd: () => void;
   isVariant?: boolean;
 }) {
@@ -51,8 +54,13 @@ function FoodItemRow({
     <div className={`flex justify-between items-start gap-3 ${isVariant ? 'py-3 border-t border-border/50' : ''}`}>
       <div className="flex-1 min-w-0">
         <h3 className={`font-medium text-foreground ${isVariant ? 'text-sm' : ''} line-clamp-2`}>
-          {displayName}
+          {displayTitle}
         </h3>
+        {displaySubtext && (
+          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+            {displaySubtext}
+          </p>
+        )}
         <div className="flex gap-3 text-xs text-muted-foreground mt-1.5">
           <span className="text-nutrition-protein">P: {formatNutrient(nutrients.protein)}g</span>
           <span className="text-nutrition-carbs">C: {formatNutrient(nutrients.carbs)}g</span>
@@ -79,12 +87,15 @@ function FoodItemRow({
   );
 }
 
-export function FoodResultCard({ group, onAddFood, index }: FoodResultCardProps) {
+export function FoodResultCard({ group, onAddFood, index, query = '' }: FoodResultCardProps) {
   const [isOpen, setIsOpen] = useState(false);
+  
+  // Get display parts for main item
+  const mainDisplay = getDisplayParts(group.mainItem.description, query);
   
   const handleAddMain = () => {
     onAddFood({
-      name: group.displayName,
+      name: mainDisplay.title,
       category: group.mainItem.foodCategory,
       nutrients: {
         calories: Math.max(0, group.mainItem.nutrients.calories),
@@ -96,9 +107,9 @@ export function FoodResultCard({ group, onAddFood, index }: FoodResultCardProps)
   };
   
   const handleAddVariant = (item: FoodItem) => {
-    const variantDisplayName = cleanDisplayName(item.description);
+    const variantDisplay = getDisplayParts(item.description, query);
     onAddFood({
-      name: variantDisplayName,
+      name: variantDisplay.title,
       category: item.foodCategory,
       nutrients: {
         calories: Math.max(0, item.nutrients.calories),
@@ -120,7 +131,8 @@ export function FoodResultCard({ group, onAddFood, index }: FoodResultCardProps)
       {/* Main item */}
       <FoodItemRow
         item={group.mainItem}
-        displayName={group.displayName}
+        displayTitle={mainDisplay.title}
+        displaySubtext={mainDisplay.subtext}
         onAdd={handleAddMain}
       />
       
@@ -150,15 +162,19 @@ export function FoodResultCard({ group, onAddFood, index }: FoodResultCardProps)
                   exit={{ opacity: 0, height: 0 }}
                   className="mt-2 pl-2 border-l-2 border-primary/20"
                 >
-                  {group.variants.map((variant) => (
-                    <FoodItemRow
-                      key={variant.fdcId}
-                      item={variant}
-                      displayName={cleanDisplayName(variant.description)}
-                      onAdd={() => handleAddVariant(variant)}
-                      isVariant
-                    />
-                  ))}
+                  {group.variants.map((variant) => {
+                    const variantDisplay = getDisplayParts(variant.description, query);
+                    return (
+                      <FoodItemRow
+                        key={variant.fdcId}
+                        item={variant}
+                        displayTitle={variantDisplay.title}
+                        displaySubtext={variantDisplay.subtext}
+                        onAdd={() => handleAddVariant(variant)}
+                        isVariant
+                      />
+                    );
+                  })}
                 </motion.div>
               )}
             </AnimatePresence>
