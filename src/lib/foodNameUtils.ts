@@ -3,9 +3,9 @@
  * to create human-friendly display names
  */
 
-// Filler words/phrases to remove
+// Filler words/phrases to remove from main title
 const FILLER_PATTERNS = [
-  /\b(raw|fresh|unprepared|uncooked|cooked|prepared)\b/gi,
+  /\b(raw|fresh|unprepared|uncooked|cooked|prepared|boiled|baked|roasted|grilled|steamed|fried)\b/gi,
   /\b(with skin|without skin|skin only|flesh only)\b/gi,
   /\b(usda|nfs|foundation|sr legacy)\b/gi,
   /\b(broilers or fryers|broiler|fryer|roaster)\b/gi,
@@ -16,6 +16,14 @@ const FILLER_PATTERNS = [
   /\b(from concentrate|not from concentrate)\b/gi,
   /,\s*,/g, // double commas
   /\s+/g, // multiple spaces
+];
+
+// Suffix patterns to extract as subtext
+const SUBTEXT_PATTERNS = [
+  /\b(raw|fresh|cooked|boiled|baked|roasted|grilled|steamed|fried)\b/gi,
+  /\b(with skin|without skin)\b/gi,
+  /\b(canned|frozen|dried|dehydrated)\b/gi,
+  /\b(salted|unsalted|sweetened|unsweetened)\b/gi,
 ];
 
 // Common variety names to detect
@@ -133,9 +141,27 @@ export function extractVariety(description: string): string | null {
 
 /**
  * Clean the display name to be human-friendly
+ * Returns title and optional subtext
  */
-export function cleanDisplayName(description: string): string {
+export function cleanDisplayName(description: string, query?: string): string {
+  const { title } = getDisplayParts(description, query);
+  return title;
+}
+
+/**
+ * Get display parts (title + subtext) for improved presentation
+ */
+export function getDisplayParts(description: string, query?: string): { title: string; subtext: string | null } {
   let cleaned = description;
+  const subtextParts: string[] = [];
+  
+  // Extract subtext-worthy parts before removing
+  for (const pattern of SUBTEXT_PATTERNS) {
+    const matches = description.match(pattern);
+    if (matches) {
+      subtextParts.push(...matches.map(m => m.toLowerCase()));
+    }
+  }
   
   // Apply all filler patterns
   for (const pattern of FILLER_PATTERNS) {
@@ -153,23 +179,33 @@ export function cleanDisplayName(description: string): string {
   // Split by comma, take meaningful parts
   const parts = cleaned.split(',').map(p => p.trim()).filter(p => p.length > 0);
   
-  if (parts.length === 0) return description;
+  if (parts.length === 0) {
+    return { title: description, subtext: null };
+  }
   
   // Capitalize first letter of each word in first part
-  const mainFood = capitalizeWords(parts[0]);
+  let mainFood = capitalizeWords(parts[0]);
   
   // Check for variety
   const variety = extractVariety(description);
+  const queryLower = query?.toLowerCase() || '';
   
-  if (variety && parts.length > 1) {
-    // If variety is already captured, just show main food + variety
-    return `${mainFood} (${variety})`;
-  } else if (parts.length > 1 && parts[1].length < 20) {
-    // Include second part as detail if it's short
-    return `${mainFood} (${capitalizeWords(parts[1])})`;
+  // Only show variety in title if user queried for it
+  const userWantsVariety = variety && queryLower.includes(variety.toLowerCase());
+  
+  if (variety && userWantsVariety) {
+    // User asked for this variety, show it prominently
+    mainFood = `${mainFood} (${variety})`;
+  } else if (variety && !userWantsVariety) {
+    // User didn't ask for variety, add it to subtext instead
+    subtextParts.unshift(variety.toLowerCase());
   }
   
-  return mainFood;
+  // Build subtext from collected parts
+  const uniqueSubtext = [...new Set(subtextParts)].slice(0, 3);
+  const subtext = uniqueSubtext.length > 0 ? uniqueSubtext.join(', ') : null;
+  
+  return { title: mainFood, subtext };
 }
 
 /**

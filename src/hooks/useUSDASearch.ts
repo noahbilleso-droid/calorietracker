@@ -6,6 +6,7 @@ import {
   buildCorrectedQuery,
   ScoredResult 
 } from '@/lib/fuzzySearch';
+import { getSynonymExpansions } from '@/lib/synonyms';
 
 const USDA_API_BASE = 'https://api.nal.usda.gov/fdc/v1';
 
@@ -201,6 +202,7 @@ export function useUSDASearch() {
       if (shouldTriggerTypoRecovery(foods, searchQuery)) {
         const { correctedQuery, wasChanged } = buildCorrectedQuery(searchQuery);
         
+        // Try corrected query first
         if (wasChanged && correctedQuery !== searchQuery.toLowerCase().trim()) {
           try {
             const correctedFoods = await fetchUSDASearch(
@@ -220,6 +222,33 @@ export function useUSDASearch() {
             }
           } catch {
             // Corrected search failed, continue with original results
+          }
+        }
+        
+        // If still weak, try synonym expansions
+        if (shouldTriggerTypoRecovery(foods, searchQuery)) {
+          const synonyms = getSynonymExpansions(searchQuery);
+          
+          // Try best synonym (just 1 to avoid API spam)
+          if (synonyms.length > 0) {
+            try {
+              const synonymFoods = await fetchUSDASearch(
+                synonyms[0],
+                apiKey,
+                abortControllerRef.current.signal
+              );
+              
+              const existingIds = new Set(foods.map(f => f.fdcId));
+              const newFoods = synonymFoods.filter(f => !existingIds.has(f.fdcId));
+              foods = [...foods, ...newFoods];
+              
+              // Set synonym as correction if it found results and no correction yet
+              if (!correctionApplied && synonymFoods.length > 0) {
+                correctionApplied = synonyms[0];
+              }
+            } catch {
+              // Synonym search failed, continue
+            }
           }
         }
       }

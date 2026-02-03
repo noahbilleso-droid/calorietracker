@@ -1,4 +1,4 @@
-import { useState, useEffect, forwardRef } from 'react';
+import { useState, useEffect, forwardRef, useRef } from 'react';
 import { Search, X, Loader2, AlertCircle, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MealType } from '@/types/nutrition';
@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useUSDASearch, USDAFood, USDANutrients } from '@/hooks/useUSDASearch';
+import { AutocompleteDropdown } from './AutocompleteDropdown';
+import { getDisplayParts } from '@/lib/foodNameUtils';
 import {
   Dialog,
   DialogContent,
@@ -53,6 +55,8 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
   const [selectedFood, setSelectedFood] = useState<SelectedFoodState | null>(null);
   const [step, setStep] = useState<'search' | 'confirm'>('search');
   const [mounted, setMounted] = useState(false);
+  const [autocompleteOpen, setAutocompleteOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   
   const { query, setQuery, results, isLoading, error, isConfigured } = useUSDASearch();
@@ -72,13 +76,19 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
   }, [open, setQuery]);
 
   const handleSelectFood = (food: USDAFood & { nutrients: USDANutrients }) => {
+    const display = getDisplayParts(food.description, query);
     setSelectedFood({
-      food,
+      food: { ...food, description: display.title }, // Use cleaned name
       nutrientsPer100g: food.nutrients,
       grams: 100,
       editedNutrients: { ...food.nutrients },
     });
     setStep('confirm');
+  };
+
+  const handleAutocompleteSelect = (text: string) => {
+    setQuery(text);
+    setAutocompleteOpen(false);
   };
 
   const handleGramsChange = (grams: number) => {
@@ -142,12 +152,21 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
       {/* Sticky search header */}
       <div className="sticky top-0 z-10 bg-background pb-3">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
           <Input
+            ref={inputRef}
             placeholder="Search foods..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => query.length >= 2 && setAutocompleteOpen(true)}
             className="pl-10"
+          />
+          <AutocompleteDropdown
+            query={query}
+            onSelect={handleAutocompleteSelect}
+            isOpen={autocompleteOpen}
+            onOpenChange={setAutocompleteOpen}
+            inputRef={inputRef}
           />
         </div>
       </div>
@@ -198,34 +217,37 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
         <ScrollArea className="flex-1 -mx-1 px-1">
           <div className="space-y-1 pb-4">
             <AnimatePresence mode="popLayout">
-              {results.map((food) => (
-                <MotionButton
-                  key={food.fdcId}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => handleSelectFood(food)}
-                  className="w-full text-left p-3 rounded-lg transition-colors hover:bg-muted border border-transparent"
-                >
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-foreground truncate">{food.description}</p>
-                      {food.foodCategory && (
-                        <p className="text-xs text-muted-foreground truncate">{food.foodCategory}</p>
-                      )}
+              {results.map((food) => {
+                const display = getDisplayParts(food.description, query);
+                return (
+                  <MotionButton
+                    key={food.fdcId}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => handleSelectFood(food)}
+                    className="w-full text-left p-3 rounded-lg transition-colors hover:bg-muted border border-transparent"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground truncate">{display.title}</p>
+                        {display.subtext && (
+                          <p className="text-xs text-muted-foreground truncate">{display.subtext}</p>
+                        )}
+                      </div>
+                      <span className="text-sm font-medium text-primary whitespace-nowrap">
+                        {food.nutrients.calories} cal
+                      </span>
                     </div>
-                    <span className="text-sm font-medium text-primary whitespace-nowrap">
-                      {food.nutrients.calories} cal
-                    </span>
-                  </div>
-                  <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                    <span>P: {food.nutrients.protein}g</span>
-                    <span>C: {food.nutrients.carbs}g</span>
-                    <span>F: {food.nutrients.fat}g</span>
-                    <span className="text-muted-foreground/60">per 100g</span>
-                  </div>
-                </MotionButton>
-              ))}
+                    <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                      <span>P: {food.nutrients.protein}g</span>
+                      <span>C: {food.nutrients.carbs}g</span>
+                      <span>F: {food.nutrients.fat}g</span>
+                      <span className="text-muted-foreground/60">per 100g</span>
+                    </div>
+                  </MotionButton>
+                );
+              })}
             </AnimatePresence>
           </div>
         </ScrollArea>
