@@ -25,7 +25,8 @@ export const SearchTab = () => {
     error, 
     isConfigured,
     didYouMean,
-    applyDidYouMean 
+    applyDidYouMean,
+    searchImmediate,
   } = useUSDASearch();
   const { addEntry } = useNutritionStore();
   const { toast } = useToast();
@@ -67,9 +68,10 @@ export const SearchTab = () => {
   };
 
   const handleAutocompleteSelect = (text: string) => {
-    setQuery(text);
     setAutocompleteOpen(false);
     inputRef.current?.blur();
+    // Use immediate search to avoid double-click issue
+    searchImmediate(text);
   };
 
   return (

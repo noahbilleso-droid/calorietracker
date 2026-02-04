@@ -59,7 +59,7 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
   const inputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   
-  const { query, setQuery, results, isLoading, error, isConfigured } = useUSDASearch();
+  const { query, setQuery, results, isLoading, error, isConfigured, searchImmediate } = useUSDASearch();
 
   // Delay content mount to prevent layout issues on first open
   useEffect(() => {
@@ -87,8 +87,9 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
   };
 
   const handleAutocompleteSelect = (text: string) => {
-    setQuery(text);
     setAutocompleteOpen(false);
+    // Use immediate search to avoid double-click issue
+    searchImmediate(text);
   };
 
   const handleGramsChange = (grams: number) => {
