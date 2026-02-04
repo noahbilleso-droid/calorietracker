@@ -153,13 +153,31 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
       {/* Sticky search header */}
       <div className="sticky top-0 z-10 bg-background pb-3">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
+          <button
+            type="button"
+            onClick={() => {
+              if (inputRef.current && inputRef.current.value.length >= 2) {
+                searchImmediate(inputRef.current.value);
+              }
+            }}
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-10 p-0 bg-transparent border-none cursor-pointer"
+            aria-label="Search"
+          >
+            <Search className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+          </button>
           <Input
             ref={inputRef}
             placeholder="Search foods..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => query.length >= 2 && setAutocompleteOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && inputRef.current && inputRef.current.value.length >= 2) {
+                e.preventDefault();
+                setAutocompleteOpen(false);
+                searchImmediate(inputRef.current.value);
+              }
+            }}
             className="pl-10"
           />
           <AutocompleteDropdown
