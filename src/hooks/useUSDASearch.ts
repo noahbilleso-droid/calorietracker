@@ -343,21 +343,21 @@ export function useUSDASearch() {
     }
   }, [apiKey]);
 
-  // Immediate search - for clicks on suggestions/did-you-mean (bypasses debounce)
-  const searchImmediate = useCallback((searchQuery: string) => {
+  // Immediate search submit - for Enter/search button/suggestions/did-you-mean (bypasses debounce)
+  const submitSearch = useCallback((term: string) => {
     // Clear any pending debounce to avoid duplicate searches
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
-    setQuery(searchQuery);
-    runSearch(searchQuery);
+    setQuery(term);
+    runSearch(term);
   }, [runSearch]);
 
   const applyDidYouMean = useCallback(() => {
     if (didYouMean) {
-      searchImmediate(didYouMean);
+      submitSearch(didYouMean);
     }
-  }, [didYouMean, searchImmediate]);
+  }, [didYouMean, submitSearch]);
 
   return {
     query,
@@ -369,6 +369,6 @@ export function useUSDASearch() {
     fetchFoodDetails,
     didYouMean,
     applyDidYouMean,
-    searchImmediate,
+    submitSearch,
   };
 }

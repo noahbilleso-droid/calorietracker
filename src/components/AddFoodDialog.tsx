@@ -59,7 +59,7 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
   const inputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   
-  const { query, setQuery, results, isLoading, error, isConfigured, searchImmediate } = useUSDASearch();
+  const { query, setQuery, results, isLoading, error, isConfigured, submitSearch } = useUSDASearch();
 
   // Delay content mount to prevent layout issues on first open
   useEffect(() => {
@@ -89,7 +89,7 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
   const handleAutocompleteSelect = (text: string) => {
     setAutocompleteOpen(false);
     // Use immediate search to avoid double-click issue
-    searchImmediate(text);
+    submitSearch(text);
   };
 
   const handleGramsChange = (grams: number) => {
@@ -157,7 +157,8 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
             type="button"
             onClick={() => {
               if (inputRef.current && inputRef.current.value.length >= 2) {
-                searchImmediate(inputRef.current.value);
+                setAutocompleteOpen(false);
+                submitSearch(inputRef.current.value);
               }
             }}
             className="absolute left-3 top-1/2 -translate-y-1/2 z-10 p-0 bg-transparent border-none cursor-pointer"
@@ -172,10 +173,13 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => query.length >= 2 && setAutocompleteOpen(true)}
             onKeyDown={(e) => {
+              // If the autocomplete consumed Enter (selecting a suggestion), don't submit again.
+              if (e.key === 'Enter' && e.defaultPrevented) return;
+
               if (e.key === 'Enter' && inputRef.current && inputRef.current.value.length >= 2) {
                 e.preventDefault();
                 setAutocompleteOpen(false);
-                searchImmediate(inputRef.current.value);
+                submitSearch(inputRef.current.value);
               }
             }}
             className="pl-10"
