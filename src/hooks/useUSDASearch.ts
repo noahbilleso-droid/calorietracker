@@ -156,6 +156,7 @@ export function useUSDASearch() {
   const [isConfigured, setIsConfigured] = useState(true);
   const [didYouMean, setDidYouMean] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const apiKey = import.meta.env.VITE_USDA_API_KEY;
 
@@ -166,7 +167,8 @@ export function useUSDASearch() {
     }
   }, [apiKey]);
 
-  const searchFoods = useCallback(async (searchQuery: string) => {
+  // Core search function - takes query string directly (not from state)
+  const runSearch = useCallback(async (searchQuery: string) => {
     if (!apiKey) {
       setIsConfigured(false);
       return;
@@ -286,22 +288,39 @@ export function useUSDASearch() {
     }
   }, [apiKey]);
 
-  // Debounced search with 400ms delay
-  useEffect(() => {
-    if (!isConfigured) return;
-    
-    const timer = setTimeout(() => {
-      if (query.length >= 2) {
-        searchFoods(query);
-      } else {
-        setResults([]);
-        setError(null);
-        setDidYouMean(null);
-      }
-    }, 400);
+  // Debounced search - called on input change
+  const debouncedSearch = useCallback((searchQuery: string) => {
+    // Clear any pending debounce
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
 
-    return () => clearTimeout(timer);
-  }, [query, searchFoods, isConfigured]);
+    if (searchQuery.length < 2) {
+      setResults([]);
+      setError(null);
+      setDidYouMean(null);
+      return;
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      runSearch(searchQuery);
+    }, 400);
+  }, [runSearch]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Wrapper for setQuery that also triggers debounced search
+  const updateQuery = useCallback((newQuery: string) => {
+    setQuery(newQuery);
+    debouncedSearch(newQuery);
+  }, [debouncedSearch]);
 
   const fetchFoodDetails = useCallback(async (fdcId: number): Promise<USDANutrients | null> => {
     if (!apiKey) return null;
@@ -324,15 +343,25 @@ export function useUSDASearch() {
     }
   }, [apiKey]);
 
+  // Immediate search - for clicks on suggestions/did-you-mean (bypasses debounce)
+  const searchImmediate = useCallback((searchQuery: string) => {
+    // Clear any pending debounce to avoid duplicate searches
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    setQuery(searchQuery);
+    runSearch(searchQuery);
+  }, [runSearch]);
+
   const applyDidYouMean = useCallback(() => {
     if (didYouMean) {
-      setQuery(didYouMean);
+      searchImmediate(didYouMean);
     }
-  }, [didYouMean]);
+  }, [didYouMean, searchImmediate]);
 
   return {
     query,
-    setQuery,
+    setQuery: updateQuery,
     results,
     isLoading,
     error,
@@ -340,5 +369,6 @@ export function useUSDASearch() {
     fetchFoodDetails,
     didYouMean,
     applyDidYouMean,
+    searchImmediate,
   };
 }
