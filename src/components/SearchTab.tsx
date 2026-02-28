@@ -1,14 +1,14 @@
 import { useState, useMemo, useRef } from 'react';
-import { Search, Loader2, AlertCircle, Lightbulb } from 'lucide-react';
+import { Search, Loader2, AlertCircle, Lightbulb, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { useUSDASearch, USDANutrients } from '@/hooks/useUSDASearch';
 import { useNutritionStore } from '@/hooks/useNutritionStore';
 import { FoodConfirmationDialog } from './FoodConfirmationDialog';
-import { FoodResultCard } from './FoodResultCard';
 import { AutocompleteDropdown } from './AutocompleteDropdown';
 import { useToast } from '@/hooks/use-toast';
-import { groupFoodResults } from '@/lib/foodNameUtils';
+import { ProcessedFoodResult } from '@/lib/searchPostProcess';
 
 interface SelectedFood {
   name: string;
@@ -35,14 +35,12 @@ export const SearchTab = () => {
   const [autocompleteOpen, setAutocompleteOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Group and sort results for human-friendly display
-  const groupedResults = useMemo(() => {
-    if (!results || results.length === 0) return [];
-    return groupFoodResults(results, query);
-  }, [results, query]);
-
-  const handleAddFood = (food: { name: string; category?: string; nutrients: USDANutrients }) => {
-    setSelectedFood(food);
+  const handleAddFood = (food: ProcessedFoodResult) => {
+    setSelectedFood({
+      name: food.displayName,
+      category: food.foodCategory,
+      nutrients: food.nutrients,
+    });
     setConfirmDialogOpen(true);
   };
 
@@ -199,7 +197,7 @@ export const SearchTab = () => {
         )}
 
         {/* No results */}
-        {isConfigured && !isLoading && !error && query.length >= 2 && groupedResults.length === 0 && (
+        {isConfigured && !isLoading && !error && query.length >= 2 && results.length === 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -213,18 +211,64 @@ export const SearchTab = () => {
           </motion.div>
         )}
 
-        {/* Grouped Results */}
-        {isConfigured && !isLoading && groupedResults.length > 0 && (
+        {/* Results */}
+        {isConfigured && !isLoading && results.length > 0 && (
           <div className="space-y-2">
             <AnimatePresence mode="popLayout">
-              {groupedResults.map((group, index) => (
-                <FoodResultCard
-                  key={group.key + '-' + group.mainItem.fdcId}
-                  group={group}
-                  onAddFood={handleAddFood}
-                  index={index}
-                  query={query}
-                />
+              {results.map((food, index) => (
+                <motion.div
+                  key={food.fdcId}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ delay: index * 0.03 }}
+                  className="bg-card rounded-lg p-4 border border-border shadow-sm"
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-foreground line-clamp-2">
+                        {food.displayName}
+                      </h3>
+                      {food.subtext && (
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                          {food.subtext}
+                        </p>
+                      )}
+                      {food.defaultServing ? (
+                        <div className="flex gap-3 text-xs text-muted-foreground mt-1.5">
+                          <span className="font-medium text-foreground/70">
+                            {food.defaultServing.label} (~{food.defaultServing.grams}g)
+                          </span>
+                          <span className="text-nutrition-protein">P: {food.servingNutrients?.protein}g</span>
+                          <span className="text-nutrition-carbs">C: {food.servingNutrients?.carbs}g</span>
+                          <span className="text-nutrition-fat">F: {food.servingNutrients?.fat}g</span>
+                        </div>
+                      ) : (
+                        <div className="flex gap-3 text-xs text-muted-foreground mt-1.5">
+                          <span className="text-nutrition-protein">P: {food.nutrients.protein}g</span>
+                          <span className="text-nutrition-carbs">C: {food.nutrients.carbs}g</span>
+                          <span className="text-nutrition-fat">F: {food.nutrients.fat}g</span>
+                          <span className="text-muted-foreground/60">per 100g</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="font-bold text-primary text-lg">
+                        {food.defaultServing ? food.servingNutrients?.calories : food.nutrients.calories}
+                        <span className="text-xs font-normal text-muted-foreground ml-0.5">kcal</span>
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAddFood(food)}
+                        className="h-8 px-3"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                </motion.div>
               ))}
             </AnimatePresence>
           </div>
