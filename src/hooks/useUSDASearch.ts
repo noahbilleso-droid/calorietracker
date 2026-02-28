@@ -7,6 +7,7 @@ import {
   ScoredResult 
 } from '@/lib/fuzzySearch';
 import { getSynonymExpansions } from '@/lib/synonyms';
+import { postProcessResults, ProcessedFoodResult } from '@/lib/searchPostProcess';
 
 const USDA_API_BASE = 'https://api.nal.usda.gov/fdc/v1';
 
@@ -150,7 +151,7 @@ async function fetchUSDASearch(
 
 export function useUSDASearch() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<FoodWithNutrients[]>([]);
+  const [results, setResults] = useState<ProcessedFoodResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConfigured, setIsConfigured] = useState(true);
@@ -256,26 +257,25 @@ export function useUSDASearch() {
       }
 
       // Re-rank results using fuzzy matching
-      // Use corrected query for ranking if available, otherwise use original
       const rankingQuery = correctionApplied || searchQuery;
       const ranked = rerankResults(rankingQuery, foods);
       
       // Filter out very low scoring results
       const filteredRanked = ranked.filter(r => r.score >= 0.3);
-      
-      // Extract just the items, sorted by score
       const sortedFoods = filteredRanked.map(r => r.item);
 
+      // Post-process: clean names, deduplicate, limit to 8
+      const processed = postProcessResults(sortedFoods, rankingQuery, 8);
+
       // Set "Did you mean" if a correction was applied and found results
-      if (correctionApplied && sortedFoods.length > 0) {
+      if (correctionApplied && processed.length > 0) {
         setDidYouMean(correctionApplied);
       } else {
-        // Fall back to the original "Did you mean" logic
         const suggestion = getDidYouMean(searchQuery, sortedFoods);
         setDidYouMean(suggestion);
       }
 
-      setResults(sortedFoods);
+      setResults(processed);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         return;

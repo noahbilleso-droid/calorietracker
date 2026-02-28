@@ -11,6 +11,14 @@ export const FOOD_SYNONYMS: Record<string, string[]> = {
   'pop': ['soda', 'soft drink'],
   'juice': ['fruit juice'],
   
+  // Bread & Toast
+  'toast': ['bread toasted', 'white bread toasted', 'whole wheat bread toasted'],
+  'a toast': ['bread toasted', 'toast'],
+  'slice of toast': ['bread toasted'],
+  'white toast': ['white bread toasted'],
+  'wheat toast': ['whole wheat bread toasted'],
+  'whole wheat toast': ['whole wheat bread toasted'],
+  
   // Snacks & Sides
   'fries': ['french fries', 'potato fries'],
   'french fries': ['fries', 'chips'],

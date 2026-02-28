@@ -5,9 +5,10 @@ import { MealType } from '@/types/nutrition';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useUSDASearch, USDAFood, USDANutrients } from '@/hooks/useUSDASearch';
+import { useUSDASearch, USDANutrients } from '@/hooks/useUSDASearch';
 import { AutocompleteDropdown } from './AutocompleteDropdown';
 import { getDisplayParts } from '@/lib/foodNameUtils';
+import { ProcessedFoodResult } from '@/lib/searchPostProcess';
 import {
   Dialog,
   DialogContent,
@@ -39,7 +40,7 @@ const mealLabels: Record<MealType, string> = {
 };
 
 interface SelectedFoodState {
-  food: USDAFood;
+  food: { fdcId: number; description: string; foodCategory?: string };
   nutrientsPer100g: USDANutrients;
   grams: number;
   editedNutrients: USDANutrients;
@@ -75,13 +76,19 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
     }
   }, [open, setQuery]);
 
-  const handleSelectFood = (food: USDAFood & { nutrients: USDANutrients }) => {
-    const display = getDisplayParts(food.description, query);
+  const handleSelectFood = (food: ProcessedFoodResult) => {
+    const defaultGrams = food.defaultServing?.grams || 100;
+    const scale = defaultGrams / 100;
     setSelectedFood({
-      food: { ...food, description: display.title }, // Use cleaned name
+      food: { ...food, description: food.displayName },
       nutrientsPer100g: food.nutrients,
-      grams: 100,
-      editedNutrients: { ...food.nutrients },
+      grams: defaultGrams,
+      editedNutrients: {
+        calories: Math.round(food.nutrients.calories * scale),
+        protein: Math.round(food.nutrients.protein * scale * 10) / 10,
+        carbs: Math.round(food.nutrients.carbs * scale * 10) / 10,
+        fat: Math.round(food.nutrients.fat * scale * 10) / 10,
+      },
     });
     setStep('confirm');
   };
@@ -240,37 +247,45 @@ export const AddFoodDialog = ({ open, onOpenChange, mealType, onAddFood }: AddFo
         <ScrollArea className="flex-1 -mx-1 px-1">
           <div className="space-y-1 pb-4">
             <AnimatePresence mode="popLayout">
-              {results.map((food) => {
-                const display = getDisplayParts(food.description, query);
-                return (
-                  <MotionButton
-                    key={food.fdcId}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => handleSelectFood(food)}
-                    className="w-full text-left p-3 rounded-lg transition-colors hover:bg-muted border border-transparent"
-                  >
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground truncate">{display.title}</p>
-                        {display.subtext && (
-                          <p className="text-xs text-muted-foreground truncate">{display.subtext}</p>
-                        )}
-                      </div>
-                      <span className="text-sm font-medium text-primary whitespace-nowrap">
-                        {food.nutrients.calories} cal
-                      </span>
+              {results.map((food) => (
+                <MotionButton
+                  key={food.fdcId}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => handleSelectFood(food)}
+                  className="w-full text-left p-3 rounded-lg transition-colors hover:bg-muted border border-transparent"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-foreground truncate">{food.displayName}</p>
+                      {food.subtext && (
+                        <p className="text-xs text-muted-foreground truncate">{food.subtext}</p>
+                      )}
                     </div>
-                    <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                      <span>P: {food.nutrients.protein}g</span>
-                      <span>C: {food.nutrients.carbs}g</span>
-                      <span>F: {food.nutrients.fat}g</span>
-                      <span className="text-muted-foreground/60">per 100g</span>
-                    </div>
-                  </MotionButton>
-                );
-              })}
+                    <span className="text-sm font-medium text-primary whitespace-nowrap">
+                      {food.defaultServing ? food.servingNutrients?.calories : food.nutrients.calories} cal
+                    </span>
+                  </div>
+                  <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                    {food.defaultServing ? (
+                      <>
+                        <span className="font-medium text-foreground/70">{food.defaultServing.label}</span>
+                        <span>P: {food.servingNutrients?.protein}g</span>
+                        <span>C: {food.servingNutrients?.carbs}g</span>
+                        <span>F: {food.servingNutrients?.fat}g</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>P: {food.nutrients.protein}g</span>
+                        <span>C: {food.nutrients.carbs}g</span>
+                        <span>F: {food.nutrients.fat}g</span>
+                        <span className="text-muted-foreground/60">per 100g</span>
+                      </>
+                    )}
+                  </div>
+                </MotionButton>
+              ))}
             </AnimatePresence>
           </div>
         </ScrollArea>

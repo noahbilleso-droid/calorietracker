@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { USDANutrients } from '@/hooks/useUSDASearch';
+import { getDefaultServing } from '@/lib/servingSizes';
 import {
   Dialog,
   DialogContent,
@@ -63,8 +64,16 @@ export const FoodConfirmationDialog = ({
   useEffect(() => {
     if (food) {
       setNutrientsPer100g(food.nutrients);
-      setNutrients({ ...food.nutrients });
-      setGrams(100);
+      const serving = getDefaultServing(food.name);
+      const defaultGrams = serving?.grams || 100;
+      const scale = defaultGrams / 100;
+      setGrams(defaultGrams);
+      setNutrients({
+        calories: Math.round(food.nutrients.calories * scale),
+        protein: Math.round(food.nutrients.protein * scale * 10) / 10,
+        carbs: Math.round(food.nutrients.carbs * scale * 10) / 10,
+        fat: Math.round(food.nutrients.fat * scale * 10) / 10,
+      });
       if (fixedMealType) {
         setMealType(fixedMealType);
       }
