@@ -119,7 +119,7 @@ const Auth = () => {
     setIsGoogleLoading(true);
     try {
       const { error } = await lovable.auth.signInWithOAuth('google', {
-        redirect_uri: window.location.origin,
+        redirect_uri: 'https://noahbilleso-droid.github.io/calorietracker/',
       });
       if (error) {
         toast({
